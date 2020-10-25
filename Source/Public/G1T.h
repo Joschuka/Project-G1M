@@ -45,6 +45,12 @@ struct G1TTextureInfo
 		//compute width and height
 		height = pow(2, dxdy >> 4);
 		width = pow(2, dxdy & 0xF);
+		if (bBigEndian)
+		{
+			uint32_t temp = width;
+			width = height;
+			height = temp;
+		}
 
 		//Extra header
 		if (extraHeaderVersion > 0)

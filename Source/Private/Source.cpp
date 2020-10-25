@@ -25,6 +25,7 @@ bool bG1TMergeG1MOnly = false;
 bool bAdditive = false;
 bool bColor = false;
 bool bDisplayDriver = false;
+bool bDisableNUNNodes = false;
 
 #include "../Public/Options.h"
 
@@ -767,6 +768,9 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 		}
 	}
 	
+	if (bDisableNUNNodes)
+		jointIndex = globalIndices.size();
+
 	//Skel names if relevant
 	if (joints > 0)
 	{
@@ -855,7 +859,7 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 				submeshesIndex.insert(index); //Filter all submeshes that need to be rendered
 				bIsPhysType1[index] = mesh.meshType == 1;
 				bIsPhysType2[index] = mesh.meshType == 2;
-				if (bIsPhysType1[index]) //Only NUNMeshes, avoid crashing on SOFT
+				if (bIsPhysType1[index] && joints) //Only NUNMeshes, avoid crashing on SOFT. Only if NUN nodes have been parsed
 				{
 					if (mesh.externalID >= 0 && mesh.externalID < 10000)
 						nunMapJointIndex[index] = fileIndexToNUNO1Map[i][mesh.externalID];
@@ -1200,7 +1204,7 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 			}
 
 			//Transforming vertices for Cloth Type 1
-			if (bIsPhysType1[smIdx])
+			if (bIsPhysType1[smIdx] && joints)
 			{
 				modelBone_t* CPSet = joints + nunMapJointIndex[smIdx];
 				float* posB = (float*)(controlPointsWeightsSet1);
@@ -1511,28 +1515,31 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 	rapi->rpgClearBufferBinds();
 	rapi->rpgSetBoneMap(nullptr);
 	uint8_t dvmIndex = 0;
-	for (auto& dvM :driverMeshes)
+	if (!bDisableNUNNodes)
 	{
-		noesisMaterial_t* material = rapi->Noesis_GetMaterialList(1, true);
-		char mat_name[128];
-		snprintf(mat_name, 128, "driver_%d_mat", dvmIndex);
-		material->name = rapi->Noesis_PooledString(mat_name);
-		material->texIdx = -1;
-		material->diffuse[0] = material->diffuse[1] = material->diffuse[2] = material->diffuse[3] = 1;
-		material->flags |= NMATFLAG_TWOSIDED;
-		if(!bDisplayDriver)
-			material->skipRender = true;
-		matList.Append(material);
-		rapi->rpgSetMaterial(mat_name);
+		for (auto& dvM : driverMeshes)
+		{
+			noesisMaterial_t* material = rapi->Noesis_GetMaterialList(1, true);
+			char mat_name[128];
+			snprintf(mat_name, 128, "driver_%d_mat", dvmIndex);
+			material->name = rapi->Noesis_PooledString(mat_name);
+			material->texIdx = -1;
+			material->diffuse[0] = material->diffuse[1] = material->diffuse[2] = material->diffuse[3] = 1;
+			material->flags |= NMATFLAG_TWOSIDED;
+			if (!bDisplayDriver)
+				material->skipRender = true;
+			matList.Append(material);
+			rapi->rpgSetMaterial(mat_name);
 
-		char mesh_name[128];
-		snprintf(mesh_name, 128, "driver_%d", dvmIndex);
-		rapi->rpgSetName(mesh_name);
-		rapi->rpgBindPositionBuffer(dvM.posBuffer.address, dvM.posBuffer.dataType, dvM.posBuffer.stride);
-		rapi->rpgBindBoneIndexBuffer(dvM.blendIndicesBuffer.address, dvM.blendIndicesBuffer.dataType, dvM.blendIndicesBuffer.stride, dvM.jointPerVertex);
-		rapi->rpgBindBoneWeightBuffer(dvM.blendWeightsBuffer.address, dvM.blendWeightsBuffer.dataType, dvM.blendWeightsBuffer.stride, dvM.jointPerVertex);
-		rapi->rpgCommitTriangles(dvM.indexBuffer.address, dvM.indexBuffer.dataType, dvM.indexBuffer.indexCount, dvM.indexBuffer.primType,true);
-		dvmIndex += 1;
+			char mesh_name[128];
+			snprintf(mesh_name, 128, "driver_%d", dvmIndex);
+			rapi->rpgSetName(mesh_name);
+			rapi->rpgBindPositionBuffer(dvM.posBuffer.address, dvM.posBuffer.dataType, dvM.posBuffer.stride);
+			rapi->rpgBindBoneIndexBuffer(dvM.blendIndicesBuffer.address, dvM.blendIndicesBuffer.dataType, dvM.blendIndicesBuffer.stride, dvM.jointPerVertex);
+			rapi->rpgBindBoneWeightBuffer(dvM.blendWeightsBuffer.address, dvM.blendWeightsBuffer.dataType, dvM.blendWeightsBuffer.stride, dvM.jointPerVertex);
+			rapi->rpgCommitTriangles(dvM.indexBuffer.address, dvM.indexBuffer.dataType, dvM.indexBuffer.indexCount, dvM.indexBuffer.primType, true);
+			dvmIndex += 1;
+		}
 	}
 
 	//Joints and anims
@@ -1543,7 +1550,8 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 		noesisAnim_t* anims = rapi->Noesis_AnimFromAnimsList(animList, num);
 		if (anims)
 			rapi->rpgSetExData_AnimsNum(anims, 1);
-		rapi->rpgSetOption(RPGOPT_FILLINWEIGHTS, true);
+		if(!bDisableNUNNodes)
+			rapi->rpgSetOption(RPGOPT_FILLINWEIGHTS, true);
 	}
 	//Materials
 	noesisMatData_t* pMd = rapi->Noesis_GetMatDataFromLists(matList, textureList);
@@ -1654,29 +1662,40 @@ bool NPAPI_InitLocal(void)
 
 	//Options
 	int optHandle;
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("G1M - Merge all assets in the same folder"), setMerge, nullptr);
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Merge all assets in the same folder"), setMerge, nullptr);
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Merges all the g1m, g1t, oid and g1a/g2a files."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getMerge(optHandle);
 
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("G1M - Only models when merging"), setMergeG1MOnly, nullptr);
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Only models when merging"), setMergeG1MOnly, nullptr);
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("If the merging option is set, only merge the g1m files and ignore the others."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getMergeG1MOnly(optHandle);
 
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("G1M - Select G1T when non/partial merge"), setG1TMergeG1MOnly, nullptr);
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Select G1T when non/partial merge"), setG1TMergeG1MOnly, nullptr);
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Select the G1T file manually."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getG1TMergeG1MOnly(optHandle);
 
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("G1M - Additive animations"), setAdditive, nullptr);
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Additive animations"), setAdditive, nullptr);
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Set to true if the animations are additive."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getAdditive(optHandle);
 
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("G1M - Process vertex colors"), setColor, nullptr);
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Process vertex colors"), setColor, nullptr);
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Extract the vertex colors."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getColor(optHandle);
 	
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("G1M - Display physics drivers"), setDisplayDriver, nullptr);
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Display physics drivers"), setDisplayDriver, nullptr);
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Display the physics drivers."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getDisplayDriver(optHandle);
+
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Disable NUN nodes"), setDisableNUNNodes, nullptr);
+	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Only keep the base skeleton, ignoring the NUN nodes."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
+	getDisableNUNNodes(optHandle);
 
 	//Models
 	g_nfn->NPAPI_SetTypeHandler_TypeCheck(fHandle, CheckModel<false>);

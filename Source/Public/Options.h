@@ -117,5 +117,24 @@ int setDisplayDriver(int handle, void* userData)
 	return 1;
 }
 
+//bDisableNUNNodes
+void getDisableNUNNodes(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::disableNUN"), buffer, 1))
+	{
+		bDisableNUNNodes = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bDisableNUNNodes);
+}
+int setDisableNUNNodes(int handle, void* userData)
+{
+	bDisableNUNNodes = !bDisableNUNNodes;
+	BYTE buffer[1] = { bDisableNUNNodes };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::disableNUN"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bDisableNUNNodes);
+	return 1;
+}
+
 #endif // !G1MOPT_H
 
