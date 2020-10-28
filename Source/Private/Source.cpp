@@ -904,15 +904,18 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 					matOffset = g1tTextureOffsets[i];
 				for (G1MGTexture<bBigEndian>& textureInfo : g1mg.materials[submesh.materialIndex].g1mgTextures)
 				{
-					if (textureInfo.textureType == 1 && !bHasDiffuse && textureInfo.layer == 0)
+					if (textureInfo.textureType == 1 && !bHasDiffuse)
 					{
 						material->texIdx = textureInfo.index + matOffset;
 						bHasDiffuse = true;
+						if (textureInfo.layer == 1)
+							material->flags |= NMATFLAG_DIFFUSE_UV1;
 					}
 					else if (textureInfo.textureType == 3 && !bHasNormal)
 					{
 						material->normalTexIdx = textureInfo.index + matOffset;
-						bHasDiffuse = true;
+						if (textureInfo.layer == 1)
+							material->flags |= NMATFLAG_NORMAL_UV1;
 					}
 				}
 				char mat_name[128];
@@ -1064,6 +1067,9 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 						else if (attribute.layer == 1)
 							rapi->rpgBindUV2Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_HALFFLOAT, vbuf.stride);
 						break;
+					case EG1MGVADatatype::VADataType_HalfFloat_x4:					
+						rapi->rpgBindUV1Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_HALFFLOAT, vbuf.stride);
+						rapi->rpgBindUV2Buffer(vbuf.bufferAdress + attribute.offset + 4, RPGEODATA_HALFFLOAT, vbuf.stride);
 					case EG1MGVADatatype::VADataType_UByte_x4:
 						controlPointRelativeIndices4 = vbuf.bufferAdress + attribute.offset;
 						cPIdx4Type = EG1MGVADatatype::VADataType_UByte_x4;
