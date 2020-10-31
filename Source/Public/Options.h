@@ -136,5 +136,45 @@ int setDisableNUNNodes(int handle, void* userData)
 	return 1;
 }
 
+//bNoTextureRename
+void getNoTextureRename(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::textureRename"), buffer, 1))
+	{
+		bNoTextureRename = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bNoTextureRename);
+}
+int setNoTextureRename(int handle, void* userData)
+{
+	bNoTextureRename = !bNoTextureRename;
+	BYTE buffer[1] = { bNoTextureRename };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::textureRename"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bNoTextureRename);
+	return 1;
+}
+
+//g1t console command
+bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
+{
+	if (std::filesystem::exists(std::filesystem::path(std::string(arg))) && (std::filesystem::path(std::string(arg)).extension() == ".g1t"))
+	{
+		memcpy(g1tConsolePath, arg, storeSize);
+		return true;
+	}
+	else
+	{
+		strcpy(g1tConsolePath, "");
+		return false;
+	}
+		
+}
+
+void g1tConsoleReset(unsigned char* store, int storeSize)
+{
+	*store = 1;
+}
+
 #endif // !G1MOPT_H
 

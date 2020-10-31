@@ -19,13 +19,15 @@ const char* g_pPluginName = "ProjectG1M";
 const char* g_pPluginDesc = "G1M Noesis plugin";
 
 //Options
-bool bMerge = true;
-bool bMergeG1MOnly = true;
+bool bMerge = false;
+bool bMergeG1MOnly = false;
 bool bG1TMergeG1MOnly = false;
 bool bAdditive = false;
 bool bColor = false;
 bool bDisplayDriver = false;
 bool bDisableNUNNodes = false;
+bool bNoTextureRename = false;
+char g1tConsolePath[MAX_NOESIS_PATH];
 
 #include "../Public/Options.h"
 
@@ -47,7 +49,8 @@ template<bool bBigEndian>
 bool LoadTexture(BYTE* fileBuffer, int bufferLen, CArrayList<noesisTex_t*>& noeTex, noeRAPI_t* rapi)
 {
 	G1T<bBigEndian>(fileBuffer, bufferLen, noeTex, rapi);
-	rapi->Noesis_ProcessCommands("-texnorepfn"); //avoid renaming of the first texture
+	if(!bNoTextureRename)
+		rapi->Noesis_ProcessCommands("-texnorepfn"); //avoid renaming of the first texture
 	return 1;
 }
 
@@ -160,36 +163,56 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 	for (const auto& p : g1mPaths)
 	{
 		int length;
-		fileBuffers.push_back((BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length));
-		fileLengths.push_back(length);
+		BYTE* fb = (BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length);
+		if (length > 0)
+		{
+			fileBuffers.push_back(fb);
+			fileLengths.push_back(length);
+		}
 	}
 
 	for (const auto& p : g1tPaths)
 	{
 		int length;
-		g1tFileBuffers.push_back((BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length));
-		g1tFileLengths.push_back(length);
+		BYTE* fb = (BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length);
+		if (length > 0)
+		{
+			g1tFileBuffers.push_back(fb);
+			g1tFileLengths.push_back(length);
+		}
 	}
 
 	for (const auto& p : g1aPaths)
 	{
 		int length;
-		g1aFileBuffers.push_back((BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length));
-		g1aFileLengths.push_back(length);
+		BYTE* fb = (BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length);
+		if (length > 0)
+		{
+			g1aFileBuffers.push_back(fb);
+			g1aFileLengths.push_back(length);
+		}
 	}
 
 	for (const auto& p : g2aPaths)
 	{
 		int length;
-		g2aFileBuffers.push_back((BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length));
-		g2aFileLengths.push_back(length);
+		BYTE* fb = (BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length);
+		if (length > 0)
+		{
+			g2aFileBuffers.push_back(fb);
+			g2aFileLengths.push_back(length);
+		}
 	}
 
 	for (const auto& p : oidPaths)
 	{
 		int length;
-		oidFileBuffers.push_back((BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length));
-		oidFileLengths.push_back(length);
+		BYTE* fb = (BYTE*)rapi->Noesis_ReadFile(p.c_str(), &length);
+		if (length > 0)
+		{
+			oidFileBuffers.push_back(fb);
+			oidFileLengths.push_back(length);
+		}
 	}
 
 	//Get all the offsets to the relevant sections
@@ -286,18 +309,31 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 		break;
 	}
 
-	if (bG1TMergeG1MOnly && (!bMerge || bMergeG1MOnly))
+	if ((bG1TMergeG1MOnly || g1tConsolePath != "") && (!bMerge || bMergeG1MOnly))
 	{
 		int length;
 		char path[MAX_NOESIS_PATH];
 		BYTE* g1tbuf = nullptr;
-		for (auto& skel : internalSkeletons)
+		if (g1tConsolePath == "")
 		{
-			g1tbuf = rapi->Noesis_LoadPairedFile(rapi->Noesis_PooledString(const_cast<char*>("Select G1T texture file")),
-				rapi->Noesis_PooledString(const_cast<char*>(".g1t")), length, path);
-			if (g1tbuf)
+			for (auto& skel : internalSkeletons)
 			{
-				g1tFileBuffers.push_back(g1tbuf);
+				g1tbuf = rapi->Noesis_LoadPairedFile(rapi->Noesis_PooledString(const_cast<char*>("Select G1T texture file")),
+					rapi->Noesis_PooledString(const_cast<char*>(".g1t")), length, path);
+				if (g1tbuf && length > 0)
+				{
+					g1tFileBuffers.push_back(g1tbuf);
+					g1tFileLengths.push_back(length);
+				}
+			}
+		}
+		else
+		{
+			int length;
+			BYTE* fb = (BYTE*)rapi->Noesis_ReadFile(std::string(g1tConsolePath).c_str(), &length);
+			if (length > 0)
+			{
+				g1tFileBuffers.push_back(fb);
 				g1tFileLengths.push_back(length);
 			}
 		}
@@ -460,7 +496,7 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 				{
 					joint->eData.parent = joints + globalToFinal[s.localIDToGlobalID[parent]];
 				}
-				snprintf(joint->name, 128, "phys_bone_%d", s.localIDToGlobalID[idx]);
+				snprintf(joint->name, 128, "physbone_%d", s.localIDToGlobalID[idx]);
 				joint->mat = s.joints[idx].rotation.ToMat43().GetInverse().m;
 				g_mfn->Math_VecCopy(s.joints[idx].position.v, joint->mat.o);
 				jointIndex += 1;
@@ -1632,7 +1668,8 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 	oidFileBuffers.clear();	
 
 	rapi->rpgDestroyContext(ctx);
-	rapi->Noesis_ProcessCommands("-texnorepfn"); //avoid renaming of the first texture
+	if(!bNoTextureRename)
+		rapi->Noesis_ProcessCommands("-texnorepfn"); //avoid renaming of the first texture
 	rapi->SetPreviewAnimSpeed(framerate);
 
 	//Freeing buffers
@@ -1702,6 +1739,23 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Only keep the base skeleton, ignoring the NUN nodes."));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getDisableNUNNodes(optHandle);
+
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("No first texture rename"), setNoTextureRename, nullptr);
+	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Do not rename the first texture to 0.dds."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
+	getNoTextureRename(optHandle);
+
+	//Console command
+	unsigned char g1tConsoleStore[MAX_NOESIS_PATH];
+	addOptParms_t optParms;
+	optParms.optName = "-g1texture";
+	optParms.optDescr = "specify a g1t file when loading a single model (full path)";
+	optParms.storeSize = MAX_NOESIS_PATH;
+	optParms.handler = g1tConsoleHandler;
+	optParms.shareStore = g1tConsoleStore;
+	optParms.storeReset = g1tConsoleReset;
+	optParms.flags |= OPTFLAG_WANTARG;
+	g_nfn->NPAPI_AddTypeOption(optHandle, &optParms);
 
 	//Models
 	g_nfn->NPAPI_SetTypeHandler_TypeCheck(fHandle, CheckModel<false>);
