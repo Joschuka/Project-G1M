@@ -309,15 +309,32 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 		break;
 	}
 
-	if ((bG1TMergeG1MOnly || g1tConsolePath != "") && (!bMerge || bMergeG1MOnly))
+	if ((bG1TMergeG1MOnly || strcmp(g1tConsolePath, "")) && (!bMerge || bMergeG1MOnly))
 	{
-		int length;
-		char path[MAX_NOESIS_PATH];
-		BYTE* g1tbuf = nullptr;
-		if (g1tConsolePath == "")
+		
+		if (!strcmp(g1tConsolePath, ""))
 		{
-			for (auto& skel : internalSkeletons)
+			if (internalSkeletons.size())
 			{
+				for (auto& skel : internalSkeletons)
+				{
+					int length;
+					char path[MAX_NOESIS_PATH];
+					BYTE* g1tbuf = nullptr;
+					g1tbuf = rapi->Noesis_LoadPairedFile(rapi->Noesis_PooledString(const_cast<char*>("Select G1T texture file")),
+						rapi->Noesis_PooledString(const_cast<char*>(".g1t")), length, path);
+					if (g1tbuf && length > 0)
+					{
+						g1tFileBuffers.push_back(g1tbuf);
+						g1tFileLengths.push_back(length);
+					}
+				}
+			}
+			else
+			{
+				int length;
+				char path[MAX_NOESIS_PATH];
+				BYTE* g1tbuf = nullptr;
 				g1tbuf = rapi->Noesis_LoadPairedFile(rapi->Noesis_PooledString(const_cast<char*>("Select G1T texture file")),
 					rapi->Noesis_PooledString(const_cast<char*>(".g1t")), length, path);
 				if (g1tbuf && length > 0)

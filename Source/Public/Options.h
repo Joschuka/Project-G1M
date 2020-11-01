@@ -174,6 +174,7 @@ bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
 void g1tConsoleReset(unsigned char* store, int storeSize)
 {
 	*store = 1;
+	strcpy(g1tConsolePath, "");
 }
 
 #endif // !G1MOPT_H
