@@ -372,6 +372,7 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 
 	//Add physics bones from external skeletons if needed. A bit tricky since overlapping global IDs (see Fatal Frame model). Rely on layer to do that
 	std::map<uint32_t, std::vector<uint32_t>> globalIndexToLayers;
+	uint32_t skeletonLayer = 2; // layer assumption proven wrong, use of a custom layering system as a result
 	for (auto& s : externalSkeletons)
 	{
 		std::vector<std::tuple<uint32_t, uint32_t, uint32_t>> toUpdateIDs;
@@ -381,7 +382,7 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 			{
 				globalIndices.insert(key);
 				s.jointLocalIndexToExtract.push_back(s.globalIDToLocalID[key]);
-				globalIndexToLayers[key].push_back(s.skeletonLayer);
+				globalIndexToLayers[key].push_back(skeletonLayer);
 			}
 			else //see if that global index was here before, with another layer
 			{
@@ -389,11 +390,11 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 				if (itr != globalIndexToLayers.end() && key !=0)
 				{
 					auto& vec = itr->second;
-					if (std::find(vec.begin(),vec.end(),s.skeletonLayer) == vec.end()) //Is that global index already on the same layer ? If not, update with a new gID
+					if (std::find(vec.begin(),vec.end(),skeletonLayer) == vec.end()) //Is that global index already on the same layer ? If not, update with a new gID
 					{
-						vec.push_back(s.skeletonLayer);
-						toUpdateIDs.push_back(std::tuple<uint32_t, uint32_t, uint32_t>(key, key + s.skeletonLayer * 1000, value));
-						globalIndices.insert(key + s.skeletonLayer * 1000);
+						vec.push_back(skeletonLayer);
+						toUpdateIDs.push_back(std::tuple<uint32_t, uint32_t, uint32_t>(key, key + skeletonLayer * 1000, value));
+						globalIndices.insert(key + skeletonLayer * 1000);
 						s.jointLocalIndexToExtract.push_back(s.globalIDToLocalID[key]);
 					}
 				}
@@ -407,6 +408,7 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 			s.globalIDToLocalID[std::get<1>(data)] = std::get<2>(data);
 			int result = s.globalIDToLocalID.erase(std::get<0>(data));
 		}
+		skeletonLayer++;
 	}
 
 	uint32_t jointCount = globalIndices.size();
