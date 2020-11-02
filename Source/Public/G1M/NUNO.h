@@ -228,6 +228,7 @@ struct NUNO
 				offset += checkpoint;
 				break;
 			default:
+				offset += subHeader.chunkSize - 12;
 				break;
 			}
 		}
