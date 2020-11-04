@@ -133,7 +133,7 @@ struct NUNO3
 		}
 
 		offset += 32;
-		if (version < 0x30303332)
+		if (version < 0x30303330)
 		{
 			offset += 0xA8;
 			if (version >= 0x30303235)
