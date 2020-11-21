@@ -1,6 +1,7 @@
 #include "../Public/stdafx.h"
 
 #include <string>
+#include <sstream>
 #include <fstream>
 #include <filesystem>
 #include <vector>
@@ -46,6 +47,14 @@ bool CheckTexture(BYTE* fileBuffer, int bufferLen, noeRAPI_t* rapi)
 }
 
 template<bool bBigEndian>
+bool CheckMap(BYTE* fileBuffer, int bufferLen, noeRAPI_t* rapi)
+{
+	if (bufferLen < 36)
+		return 0;
+	return 1;
+}
+
+template<bool bBigEndian>
 bool LoadTexture(BYTE* fileBuffer, int bufferLen, CArrayList<noesisTex_t*>& noeTex, noeRAPI_t* rapi)
 {
 	G1T<bBigEndian>(fileBuffer, bufferLen, noeTex, rapi);
@@ -56,6 +65,18 @@ bool LoadTexture(BYTE* fileBuffer, int bufferLen, CArrayList<noesisTex_t*>& noeT
 
 template<bool bBigEndian>
 noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* rapi)
+{
+	return ProcessModel<bBigEndian>(fileBuffer, bufferLen, numMdl, rapi, false);
+}
+
+template<bool bBigEndian>
+noesisModel_t* LoadMap(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* rapi)
+{
+	return ProcessModel<bBigEndian>(fileBuffer, bufferLen, numMdl, rapi, true);
+}
+
+template<bool bBigEndian>
+noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* rapi, bool bHasList)
 {
 	//Bool to check what kind of merge
 	bool bMergeSeveralInternals;
@@ -118,6 +139,11 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 	std::map<uint32_t, std::vector<uint32_t>> fileIndexToNUNO3Map;
 	std::map<uint32_t, std::vector<uint32_t>> fileIndexToNUNV1Map;
 
+	//Maps containers
+	std::vector<RichVec3> mapPositions;
+	std::vector<RichQuat> mapRotations;
+	std::vector<modelMatrix_t> mapMatrices;
+
 	//Meshes
 	std::vector<mesh_t> driverMeshes;
 
@@ -126,40 +152,72 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 	RichMat43 rootCoords;
 	
 	void* ctx = rapi->rpgCreateContext(); //Create context
-
-	//Get all the g1m paths if the option was selected
-	if (bMerge)
+	
+	if (bHasList)
 	{
-		std::filesystem::path inFile = rapi->Noesis_GetInputName();
-		//for (auto& p : std::filesystem::recursive_directory_iterator(inFile.parent_path()))
-		for (auto& p : std::filesystem::directory_iterator(inFile.parent_path()))
+		uint32_t offset = 0;
+		uint32_t entryCount = *(uint32_t*)(fileBuffer);
+		offset += 4;
+		for (auto i = 0; i < entryCount; i++)
 		{
-			if (p.path().extension() == ".g1m")
-				g1mPaths.push_back(p.path().string());
-			if (p.path().extension() == ".g1t" && !bMergeG1MOnly)
-				g1tPaths.push_back(p.path().string());
-			if (p.path().extension() == ".g1a" && !bMergeG1MOnly)
+			uint32_t temp = *(uint32_t*)(fileBuffer + offset);
+			LITTLE_BIG_SWAP(temp);
+			std::stringstream stream;
+			stream << std::hex << temp;
+			std::string filename = "D:\\Datamine backup\\AocExtract\\FieldEditor4\\g1m\\" + std::string(8 - stream.str().length(), '0') + stream.str() + ".g1m";
+			std::filesystem::path filePath = std::filesystem::path(filename);
+			if (std::filesystem::exists(filePath))
 			{
-				g1aPaths.push_back(p.path().string());
-				g1aFileNames.push_back(p.path().stem().string());
+				offset += 4;
+				g1mPaths.push_back(filePath.string());
+				mapPositions.push_back(RichVec3((float*)(fileBuffer + offset)));
+				mapRotations.push_back(RichQuat((float*)(fileBuffer + offset + 12)));
+				offset += 28;
 			}
-			if (p.path().extension() == ".g2a" && !bMergeG1MOnly)
+			else
 			{
-				g2aPaths.push_back(p.path().string());
-				g2aFileNames.push_back(p.path().stem().string());
+				offset += 32;
 			}
-			if ((p.path().extension() == ".oid" || has_suffix(p.path().filename().string(), "Oid.bin")) && !bAlreadyHasOid)
-				oidPaths.push_back(p.path().string());
+			
 		}
 	}
 	else
 	{
-		fileBuffers.push_back(fileBuffer);
-		fileLengths.push_back(bufferLen);
+		//Get all the g1m paths if the option was selected
+		if (bMerge)
+		{
+			std::filesystem::path inFile = rapi->Noesis_GetInputName();
+			//for (auto& p : std::filesystem::recursive_directory_iterator(inFile.parent_path()))
+			for (auto& p : std::filesystem::directory_iterator(inFile.parent_path()))
+			{
+				if (p.path().extension() == ".g1m")
+					g1mPaths.push_back(p.path().string());
+				if (p.path().extension() == ".g1t" && !bMergeG1MOnly)
+					g1tPaths.push_back(p.path().string());
+				if (p.path().extension() == ".g1a" && !bMergeG1MOnly)
+				{
+					g1aPaths.push_back(p.path().string());
+					g1aFileNames.push_back(p.path().stem().string());
+				}
+				if (p.path().extension() == ".g2a" && !bMergeG1MOnly)
+				{
+					g2aPaths.push_back(p.path().string());
+					g2aFileNames.push_back(p.path().stem().string());
+				}
+				if ((p.path().extension() == ".oid" || has_suffix(p.path().filename().string(), "Oid.bin")) && !bAlreadyHasOid)
+					oidPaths.push_back(p.path().string());
+			}
+		}
+		else
+		{
+			fileBuffers.push_back(fileBuffer);
+			fileLengths.push_back(bufferLen);
 
+		}
 	}
 
 	//Prepare buffers and get the lengths
+	int g1mCount = 0;
 	for (const auto& p : g1mPaths)
 	{
 		int length;
@@ -168,7 +226,14 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 		{
 			fileBuffers.push_back(fb);
 			fileLengths.push_back(length);
+			if (bHasList)
+			{
+				modelMatrix_t mat = mapRotations[g1mCount].ToMat43().GetTranspose().m;
+				g_mfn->Math_VecCopy(mapPositions[g1mCount].v, mat.o);
+				mapMatrices.push_back(mat);
+			}
 		}
+		g1mCount++;
 	}
 
 	for (const auto& p : g1tPaths)
@@ -1116,6 +1181,10 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 						else if (attribute.layer == 1)
 							rapi->rpgBindUV2Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_FLOAT, vbuf.stride);
 						break;
+					case EG1MGVADatatype::VADataType_Float_x4:
+						rapi->rpgBindUV1Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_FLOAT, vbuf.stride);
+						rapi->rpgBindUV2Buffer(vbuf.bufferAdress + attribute.offset + 8, RPGEODATA_FLOAT, vbuf.stride);
+						break;
 					case EG1MGVADatatype::VADataType_HalfFloat_x2:
 						if (attribute.layer == 0)
 							rapi->rpgBindUV1Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_HALFFLOAT, vbuf.stride);
@@ -1125,6 +1194,7 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 					case EG1MGVADatatype::VADataType_HalfFloat_x4:					
 						rapi->rpgBindUV1Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_HALFFLOAT, vbuf.stride);
 						rapi->rpgBindUV2Buffer(vbuf.bufferAdress + attribute.offset + 4, RPGEODATA_HALFFLOAT, vbuf.stride);
+						break;
 					case EG1MGVADatatype::VADataType_UByte_x4:
 						controlPointRelativeIndices4 = vbuf.bufferAdress + attribute.offset;
 						cPIdx4Type = EG1MGVADatatype::VADataType_UByte_x4;
@@ -1553,6 +1623,8 @@ noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t
 
 			//Semantic buffers set, index buffer left
 			{
+				if (bHasList)
+					rapi->rpgSetTransform(&mapMatrices[i]);
 				switch (submesh.indexBufferPrimType)
 				{
 				case 3:					
@@ -1720,6 +1792,11 @@ bool NPAPI_InitLocal(void)
 	int fTHandleBE = g_nfn->NPAPI_Register((char*)"G1T File (Big Endian)", (char*) ".g1t");
 	if (fTHandleBE < 0)
 		return false;
+	//Map handlers
+	int fMHandle = g_nfn->NPAPI_Register((char*)"RDMap File (Little Endian)", (char*) ".rdmap");
+	if (fMHandle < 0)
+		return false;
+
 
 
 	//Options
@@ -1787,6 +1864,10 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetTypeHandler_LoadRGBA(fTHandle, LoadTexture<false>);
 	g_nfn->NPAPI_SetTypeHandler_TypeCheck(fTHandleBE, CheckTexture<true>);
 	g_nfn->NPAPI_SetTypeHandler_LoadRGBA(fTHandleBE, LoadTexture<true>);
+
+	//Maps
+	g_nfn->NPAPI_SetTypeHandler_TypeCheck(fMHandle, CheckMap<false>);
+	g_nfn->NPAPI_SetTypeHandler_LoadModel(fMHandle, LoadMap<false>);
 	
 	if (!g_nfn->NPAPI_DebugLogIsOpen())
 		g_nfn->NPAPI_PopupDebugLog(0);
