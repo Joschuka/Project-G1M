@@ -136,6 +136,7 @@ struct G1T
 
 			bool bNormalized = true;
 			bool bSpecialCaseETC = false;
+			bool b3DSAlpha = false;
 			std::string rawFormat ="";
 			int fourccFormat = -1;
 
@@ -214,6 +215,16 @@ struct G1T
 				break;
 			case 0x3D:
 				fourccFormat = FOURCC_DXT1;
+				break;
+			case 0x47:
+				rawFormat = "3DS_rgb";
+				computedSize = width * height * 4;
+				b3DSAlpha = false;
+				break;
+			case 0x48:
+				rawFormat = "3DS_rgb";
+				computedSize = width * height * 4;
+				b3DSAlpha = true;
 				break;
 			case 0x56:
 				rawFormat = "ETC1_rgb";
@@ -343,6 +354,15 @@ struct G1T
 						untiledTexData[4 * j + 3] = untiledTexData[alphaOffset + 4 * j];
 					dataSize *= 8;
 				}
+				rawFormat = "r8g8b8a8";
+			}
+
+			//Decompress 3DS
+			if (!rawFormat.rfind("3DS", 0))
+			{
+				untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(width * height * 16);
+				_3DS_Decompress(buffer + offset, untiledTexData, width, height, b3DSAlpha);
+				flip_vertically(untiledTexData, width, height, 4);
 				rawFormat = "r8g8b8a8";
 			}
 

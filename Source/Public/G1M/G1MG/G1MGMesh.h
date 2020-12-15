@@ -58,21 +58,32 @@ struct G1MGMeshGroup
 	G1MGMeshGroup(BYTE* buffer, uint32_t& offset,uint32_t version)
 	{
 		//Could have done a header struct here but it's easier to get to the attributes
-		LOD = *reinterpret_cast<uint32_t*>(buffer + offset);
-		Group = *reinterpret_cast<uint32_t*>(buffer + offset + 4);
-		GroupEntryIndex = *reinterpret_cast<uint32_t*>(buffer + offset + 8);
-		submeshCount1 = *reinterpret_cast<uint32_t*>(buffer + offset + 12);
-		submeshCount2 = *reinterpret_cast<uint32_t*>(buffer + offset + 16);
-		if(version > 0x30303430)
+		if (version > 0x30303330)
 		{
-			lodRangeStart = *reinterpret_cast<uint32_t*>(buffer + offset + 20);
-			lodRangeLength = *reinterpret_cast<uint32_t*>(buffer + offset + 24);
-			offset += 36;
+			LOD = *reinterpret_cast<uint32_t*>(buffer + offset);
+			Group = *reinterpret_cast<uint32_t*>(buffer + offset + 4);
+			GroupEntryIndex = *reinterpret_cast<uint32_t*>(buffer + offset + 8);
+			submeshCount1 = *reinterpret_cast<uint32_t*>(buffer + offset + 12);
+			submeshCount2 = *reinterpret_cast<uint32_t*>(buffer + offset + 16);
+			if (version > 0x30303430)
+			{
+				lodRangeStart = *reinterpret_cast<uint32_t*>(buffer + offset + 20);
+				lodRangeLength = *reinterpret_cast<uint32_t*>(buffer + offset + 24);
+				offset += 36;
+			}
+			else
+			{
+				lodRangeStart, lodRangeLength = 0;
+				offset += 20;
+			}
 		}
 		else
 		{
-			lodRangeStart, lodRangeLength = 0;
-			offset += 20;
+			LOD = *reinterpret_cast<uint32_t*>(buffer + offset);
+			submeshCount1 = *reinterpret_cast<uint32_t*>(buffer + offset + 4);
+			submeshCount2 = *reinterpret_cast<uint32_t*>(buffer + offset + 8);
+			Group, GroupEntryIndex, lodRangeStart, lodRangeLength = 0;
+			offset += 12;
 		}
 		
 		if (bBigEndian)

@@ -602,5 +602,177 @@ void createDriverIndexBuffers(mesh_t& dMesh, std::vector<RichVec3> polys, std::v
 	}
 }
 
+//Many thanks to OnePieceFreak for the implementation example
+void _3DS_Decompress(BYTE* source, BYTE* dest, int w , int h, int hasAlpha)
+{
+	uint64_t block;
+	uint64_t alpha;
+	uint32_t pixels[4 * 4];
+	int i, j, n, x, y, count;
+	float percent;
+	uint32_t* ptr;
+	uint32_t offset = 0;
+	uint32_t* buffer = (uint32_t*)dest;
+
+	if (hasAlpha == 0) {
+		for (j = 0; j < h / 8; j++) {
+			for (i = 0; i < w / 8; i++) {
+
+				//block 1
+				memcpy(&block, source + offset, 8);
+				offset += 8;
+				LITTLE_BIG_SWAP(block);
+				rg_etc1::unpack_etc1_block(&block, pixels, false);
+				ptr = pixels;
+				for (x = 0; x < 4; x++)
+					for (y = 0; y < 4; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] = *(ptr++);
+					}
+
+				//block 2
+				memcpy(&block, source + offset, 8);
+				offset += 8;
+				LITTLE_BIG_SWAP(block);
+				rg_etc1::unpack_etc1_block(&block, pixels, false);
+				ptr = pixels;
+				for (x = 0; x < 4; x++)
+					for (y = 4; y < 8; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] = *(ptr++);
+					}
+
+				//block 3
+				memcpy(&block, source + offset, 8);
+				offset += 8;
+				LITTLE_BIG_SWAP(block);
+				rg_etc1::unpack_etc1_block(&block, pixels, false);
+				ptr = pixels;
+				for (x = 4; x < 8; x++)
+					for (y = 0; y < 4; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] = *(ptr++);
+					}
+
+				//block 4
+				memcpy(&block, source + offset, 8);
+				offset += 8;
+				LITTLE_BIG_SWAP(block);
+				rg_etc1::unpack_etc1_block(&block, pixels, false);
+				ptr = pixels;
+				for (x = 4; x < 8; x++)
+					for (y = 4; y < 8; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] = *(ptr++);
+					}
+			}
+		}
+	}
+	else
+	{
+		for (j = 0; j < h / 8; j++) {
+			for (i = 0; i < w / 8; i++) {
+
+				//block 1, alpha
+				memcpy(&alpha, source + offset, 8);
+				offset += 8;
+				for (x = 0; x < 4; x++) {
+					for (y = 0; y < 4; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (y * w + x)] = ((((alpha & 0xF) << 28) | ((alpha & 0xF) << 24)) & 0xFF000000);
+						alpha >>= 4;
+					}
+				}
+				//block 1, pixels
+				memcpy(&block, source + offset, 8);
+				offset += 8;
+				LITTLE_BIG_SWAP(block);
+				rg_etc1::unpack_etc1_block(&block, pixels, false);
+				ptr = pixels;
+				for (x = 0; x < 4; x++)
+					for (y = 0; y < 4; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] |= (*(ptr++) & 0xFFFFFF);
+					}
+
+
+
+				//block 2, alpha
+				memcpy(&alpha, source + offset, 8);
+				offset += 8;
+				for (x = 4; x < 8; x++) {
+					for (y = 0; y < 4; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (y * w + x)] = ((((alpha & 0xF) << 28) | ((alpha & 0xF) << 24)) & 0xFF000000);
+						alpha >>= 4;
+					}
+				}
+				//block 2, pixels
+				memcpy(&block, source + offset, 8);
+				offset += 8;
+				LITTLE_BIG_SWAP(block);
+				rg_etc1::unpack_etc1_block(&block, pixels, false);
+				ptr = pixels;
+				for (x = 0; x < 4; x++)
+					for (y = 4; y < 8; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] |= (*(ptr++) & 0xFFFFFF);
+					}
+
+
+				//block 3, alpha
+				memcpy(&alpha, source + offset, 8);
+				offset += 8;
+				for (x = 0; x < 4; x++) {
+					for (y = 4; y < 8; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (y * w + x)] = ((((alpha & 0xF) << 28) | ((alpha & 0xF) << 24)) & 0xFF000000);
+						alpha >>= 4;
+					}
+				}
+				//block 3, pixels
+				memcpy(&block, source + offset, 8);
+				offset += 8;
+				LITTLE_BIG_SWAP(block);
+				rg_etc1::unpack_etc1_block(&block, pixels, false);
+				ptr = pixels;
+				for (x = 4; x < 8; x++)
+					for (y = 0; y < 4; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] |= (*(ptr++) & 0xFFFFFF);
+					}
+
+
+
+				//block 4, alpha
+				memcpy(&alpha, source + offset, 8);
+				offset += 8;
+				for (x = 4; x < 8; x++) {
+					for (y = 4; y < 8; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (y * w + x)] = ((((alpha & 0xF) << 28) | ((alpha & 0xF) << 24)) & 0xFF000000);
+						alpha >>= 4;
+					}
+				}
+				//block 4, pixels
+				memcpy(&block, source + offset, 8);
+				offset += 8;
+				LITTLE_BIG_SWAP(block);
+				rg_etc1::unpack_etc1_block(&block, pixels, false);
+				ptr = pixels;
+				for (x = 4; x < 8; x++)
+					for (y = 4; y < 8; y++) {
+						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] |= (*(ptr++) & 0xFFFFFF);
+					}
+
+			}
+		}
+	}
+}
+
+void flip_vertically(BYTE* pixels, const size_t width, const size_t height, const size_t bytes_per_pixel)
+{
+	const size_t stride = width * bytes_per_pixel;
+	BYTE* row = (BYTE*)malloc(stride);
+	BYTE* low = pixels;
+	BYTE* high = &pixels[(height - 1) * stride];
+
+	for (; low < high; low += stride, high -= stride) {
+		memcpy(row, low, stride);
+		memcpy(low, high, stride);
+		memcpy(high, row, stride);
+	}
+	free(row);
+}
+
 #endif // !UTILS_H
 

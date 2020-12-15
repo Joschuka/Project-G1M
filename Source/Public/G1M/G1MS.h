@@ -37,7 +37,7 @@ struct G1MSJoint
 template<bool bBigEndian>
 struct G1MS
 {
-	bool bIsInternal;
+	bool bIsInternal = true;
 	uint32_t skeletonLayer;
 	std::map<uint16_t, uint16_t> localIDToGlobalID;
 	std::map<uint16_t, uint16_t> globalIDToLocalID;
@@ -45,26 +45,42 @@ struct G1MS
 	std::vector<uint16_t> jointLocalIndexToExtract;
 	G1MS(BYTE* buffer, size_t startOffset)
 	{
-		size_t offset = startOffset +12;
+		size_t offset = startOffset;
+		GResourceHeader sectionHeader = reinterpret_cast<GResourceHeader<bBigEndian>*>(buffer + offset);
+		offset += 12;
 		//Read header
 		G1MSHeader<bBigEndian> header = reinterpret_cast<G1MSHeader<bBigEndian>*>(buffer + offset);
 		skeletonLayer = header.layer;
-		//Check if the skeleton is internal or not using the 0x80000000 flag
-		uint32_t parentFlag = *reinterpret_cast<uint32_t*> (buffer + startOffset + header.jointInfoOffset +12);
-		if (bBigEndian)
-			LITTLE_BIG_SWAP(parentFlag);
-		bIsInternal = !(parentFlag == 0x80000000);
-		//Global and local indices map
-		offset += sizeof(G1MSHeader<bBigEndian>);
-		for (auto i = 0; i < header.jointIndicesCount; i++)
+		
+		if (sectionHeader.chunkVersion > 0x30303330) //No global indices before it seems, need to process differently
 		{
-			uint16_t localID = *reinterpret_cast<uint16_t*> (buffer + offset +2*i);
-			if (localID == 0xFFFF)
-				continue;
+			//Global and local indices map
+			offset += sizeof(G1MSHeader<bBigEndian>);
+			//Check if the skeleton is internal or not using the 0x80000000 flag
+			uint32_t parentFlag = *reinterpret_cast<uint32_t*> (buffer + startOffset + header.jointInfoOffset + 12);
 			if (bBigEndian)
-				LITTLE_BIG_SWAP(localID);
-			localIDToGlobalID[localID] = i;
-			globalIDToLocalID[i] = localID;			
+				LITTLE_BIG_SWAP(parentFlag);
+			bIsInternal = !(parentFlag == 0x80000000);
+			for (auto i = 0; i < header.jointIndicesCount; i++)
+			{
+				uint16_t localID = *reinterpret_cast<uint16_t*> (buffer + offset + 2 * i);
+				if (localID == 0xFFFF)
+					continue;
+				if (bBigEndian)
+					LITTLE_BIG_SWAP(localID);
+				localIDToGlobalID[localID] = i;
+				globalIDToLocalID[i] = localID;
+			}
+		}
+		else
+		{
+			offset = startOffset + header.jointInfoOffset;
+			for (auto i = 0; i < header.jointCount; i++)
+			{
+				localIDToGlobalID[i] = i;
+				globalIDToLocalID[i] = i;
+			}
+
 		}
 		//Joints
 		joints.resize(header.jointCount);

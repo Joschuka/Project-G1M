@@ -9,6 +9,7 @@
 #include <set>
 #include <array>
 
+#include "../Public/rg_etc1.h"
 #include "../Public/G1M.h"
 #include "../Public/G1T.h"
 #include "../Public/Utils.h"
@@ -29,6 +30,7 @@ bool bDisplayDriver = false;
 bool bDisableNUNNodes = false;
 bool bNoTextureRename = false;
 char g1tConsolePath[MAX_NOESIS_PATH];
+bool bEnableNUNAutoRig = true;
 
 #include "../Public/Options.h"
 
@@ -1182,8 +1184,11 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 							rapi->rpgBindUV2Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_FLOAT, vbuf.stride);
 						break;
 					case EG1MGVADatatype::VADataType_Float_x4:
-						rapi->rpgBindUV1Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_FLOAT, vbuf.stride);
-						rapi->rpgBindUV2Buffer(vbuf.bufferAdress + attribute.offset + 8, RPGEODATA_FLOAT, vbuf.stride);
+						if (attribute.layer == 0 || attribute.layer == 1)
+						{
+							rapi->rpgBindUV1Buffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_FLOAT, vbuf.stride);
+							rapi->rpgBindUV2Buffer(vbuf.bufferAdress + attribute.offset + 8, RPGEODATA_FLOAT, vbuf.stride);
+						}
 						break;
 					case EG1MGVADatatype::VADataType_HalfFloat_x2:
 						if (attribute.layer == 0)
@@ -1683,8 +1688,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		noesisAnim_t* anims = rapi->Noesis_AnimFromAnimsList(animList, num);
 		if (anims)
 			rapi->rpgSetExData_AnimsNum(anims, 1);
-		if(!bDisableNUNNodes)
+		if(!bDisableNUNNodes && bEnableNUNAutoRig)
 			rapi->rpgSetOption(RPGOPT_FILLINWEIGHTS, true);
+		else
+			rapi->rpgSetOption(RPGOPT_FILLINWEIGHTS, false);
 	}
 	//Materials
 	noesisMatData_t* pMd = rapi->Noesis_GetMatDataFromLists(matList, textureList);
@@ -1840,6 +1847,11 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Do not rename the first texture to 0.dds."));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getNoTextureRename(optHandle);
+
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Enable NUN autorig"), setEnableNUNAutoRig, nullptr);
+	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Autorig NUN meshes."));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
+	getEnableNUNAutoRig(optHandle);
 
 	//Console command
 	unsigned char g1tConsoleStore[MAX_NOESIS_PATH];

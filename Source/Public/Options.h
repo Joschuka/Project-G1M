@@ -155,6 +155,26 @@ int setNoTextureRename(int handle, void* userData)
 	return 1;
 }
 
+//bDisableNUNNodes
+void getEnableNUNAutoRig(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::enableNUNAutoRig"), buffer, 1))
+	{
+		bEnableNUNAutoRig = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bEnableNUNAutoRig);
+}
+int setEnableNUNAutoRig(int handle, void* userData)
+{
+	bEnableNUNAutoRig = !bEnableNUNAutoRig;
+	BYTE buffer[1] = { bEnableNUNAutoRig };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::enableNUNAutoRig"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bEnableNUNAutoRig);
+	return 1;
+}
+
+
 //g1t console command
 bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
 {

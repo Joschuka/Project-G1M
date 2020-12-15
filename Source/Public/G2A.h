@@ -173,7 +173,7 @@ struct G2A
 							animationData.push_back(std::move(q));
 						noeKeyFrameData_t noeKfValue;
 						memset(&noeKfValue, 0, sizeof(noeKeyFrameData_t));
-						noeKfValue.time = 1;
+						noeKfValue.time = 0.01;
 						noeKfValue.dataIndex = animationData.size() - 4;
 						keyFramedValues.push_back(std::move(noeKfValue));
 					}
@@ -185,7 +185,7 @@ struct G2A
 							animationData.push_back(std::move(v));
 						noeKeyFrameData_t noeKfValue;
 						memset(&noeKfValue, 0, sizeof(noeKeyFrameData_t));
-						noeKfValue.time = 1;
+						noeKfValue.time = 0.01;
 						noeKfValue.dataIndex = animationData.size() - 3;
 						keyFramedValues.push_back(std::move(noeKfValue));
 					}
@@ -197,7 +197,7 @@ struct G2A
 							animationData.push_back(std::move(v));
 						noeKeyFrameData_t noeKfValue;
 						memset(&noeKfValue, 0, sizeof(noeKeyFrameData_t));
-						noeKfValue.time = 1;
+						noeKfValue.time = 0.01;
 						noeKfValue.dataIndex = animationData.size() - 3;
 						keyFramedValues.push_back(std::move(noeKfValue));
 					}
@@ -313,7 +313,16 @@ struct G2A
 			noeAnim->filename = rapi->Noesis_PooledString(const_cast<char*>(animName.c_str()));
 			noeAnim->flags |= NANIMFLAG_FILENAMETOSEQ;
 			noeAnim->shouldFreeData = true;
+
+			/*noeAnim->aseq = rapi->Noesis_AnimSequencesAlloc(1, header.animationLength);
+			noeAnim->aseq->s->startFrame = 0;
+			noeAnim->aseq->s->endFrame = header.animationLength - 1;
+			noeAnim->aseq->s->frameRate = header.framerate;
+			noeAnim->aseq->s->name = rapi->Noesis_PooledString(const_cast<char*>(animName.c_str()));*/
+
 			animList.Append(noeAnim);
+
+			
 		}
 	}
 };
