@@ -31,6 +31,7 @@ bool bDisableNUNNodes = false;
 bool bNoTextureRename = false;
 char g1tConsolePath[MAX_NOESIS_PATH];
 bool bEnableNUNAutoRig = true;
+bool bLoadAllLODs = false;
 
 #include "../Public/Options.h"
 
@@ -974,21 +975,52 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		std::map<uint32_t,bool> bIsPhysType1; //NUN meshes. We could replace maps by vectors but we're not sure if indices are always ordered
 		std::map<uint32_t,bool> bIsPhysType2; //"Danglies" (hair strands etc)
 		std::map<uint32_t, int32_t> nunMapJointIndex;
-		for (auto& mesh : g1mg.meshGroups[0].meshes)
+		
+		if (bLoadAllLODs)
 		{
-			for (auto& index : mesh.indices)
+			for (G1MGMeshGroup<bBigEndian>& group : g1mg.meshGroups)
 			{
-				submeshesIndex.insert(index); //Filter all submeshes that need to be rendered
-				bIsPhysType1[index] = mesh.meshType == 1;
-				bIsPhysType2[index] = mesh.meshType == 2;
-				if (bIsPhysType1[index] && joints) //Only NUNMeshes, avoid crashing on SOFT. Only if NUN nodes have been parsed
+				if (!group.Group)
 				{
-					if (mesh.externalID >= 0 && mesh.externalID < 10000)
-						nunMapJointIndex[index] = fileIndexToNUNO1Map[i][mesh.externalID];
-					else if (mesh.externalID >= 10000 && mesh.externalID < 20000)
-						nunMapJointIndex[index] = fileIndexToNUNV1Map[i][mesh.externalID % 10000];
-					else if (mesh.externalID >= 20000 && mesh.externalID < 30000)
-						nunMapJointIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000];
+					for (auto& mesh : group.meshes)
+					{
+						for (auto& index : mesh.indices)
+						{
+							submeshesIndex.insert(index); //Filter all submeshes that need to be rendered
+							bIsPhysType1[index] = mesh.meshType == 1;
+							bIsPhysType2[index] = mesh.meshType == 2;
+							if (bIsPhysType1[index] && joints) //Only NUNMeshes, avoid crashing on SOFT. Only if NUN nodes have been parsed
+							{
+								if (mesh.externalID >= 0 && mesh.externalID < 10000)
+									nunMapJointIndex[index] = fileIndexToNUNO1Map[i][mesh.externalID];
+								else if (mesh.externalID >= 10000 && mesh.externalID < 20000)
+									nunMapJointIndex[index] = fileIndexToNUNV1Map[i][mesh.externalID % 10000];
+								else if (mesh.externalID >= 20000 && mesh.externalID < 30000)
+									nunMapJointIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000];
+							}
+						}
+					}
+				}
+			}
+		}
+		else
+		{
+			for (auto& mesh : g1mg.meshGroups[0].meshes)
+			{
+				for (auto& index : mesh.indices)
+				{
+					submeshesIndex.insert(index); //Filter all submeshes that need to be rendered
+					bIsPhysType1[index] = mesh.meshType == 1;
+					bIsPhysType2[index] = mesh.meshType == 2;
+					if (bIsPhysType1[index] && joints) //Only NUNMeshes, avoid crashing on SOFT. Only if NUN nodes have been parsed
+					{
+						if (mesh.externalID >= 0 && mesh.externalID < 10000)
+							nunMapJointIndex[index] = fileIndexToNUNO1Map[i][mesh.externalID];
+						else if (mesh.externalID >= 10000 && mesh.externalID < 20000)
+							nunMapJointIndex[index] = fileIndexToNUNV1Map[i][mesh.externalID % 10000];
+						else if (mesh.externalID >= 20000 && mesh.externalID < 30000)
+							nunMapJointIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000];
+					}
 				}
 			}
 		}
@@ -1248,6 +1280,26 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					}
 					if (bIsPhysType1[smIdx])
 						centerOfMassWeightsSet1 = vbuf.bufferAdress + attribute.offset;
+					break;
+
+				case EG1MGVASemantic::Tangent:
+					switch (attribute.dataType)
+					{
+					case EG1MGVADatatype::VADataType_Float_x4:
+						if (!bIsPhysType1[smIdx])
+						{
+							rapi->rpgBindTangentBuffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_FLOAT, vbuf.stride);
+						}
+						break;
+					case EG1MGVADatatype::VADataType_HalfFloat_x4:
+						if (!bIsPhysType1[smIdx])
+						{
+							rapi->rpgBindTangentBuffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_HALFFLOAT, vbuf.stride);
+						}
+						break;
+					default:
+						break;
+					}
 					break;
 
 				case EG1MGVASemantic::Binormal:
@@ -1852,6 +1904,11 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Autorig NUN meshes."));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getEnableNUNAutoRig(optHandle);
+
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Load all LODs for meshes"), setEnableLOD, nullptr);
+	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Load all LODs"));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
+	getEnableLOD(optHandle);
 
 	//Console command
 	unsigned char g1tConsoleStore[MAX_NOESIS_PATH];

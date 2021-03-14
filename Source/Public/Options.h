@@ -174,6 +174,24 @@ int setEnableNUNAutoRig(int handle, void* userData)
 	return 1;
 }
 
+//bLoadAllLODs
+void getEnableLOD(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::enableLOD"), buffer, 1))
+	{
+		bLoadAllLODs = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bLoadAllLODs);
+}
+int setEnableLOD(int handle, void* userData)
+{
+	bLoadAllLODs = !bLoadAllLODs;
+	BYTE buffer[1] = { bLoadAllLODs };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::enableLOD"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bLoadAllLODs);
+	return 1;
+}
 
 //g1t console command
 bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
