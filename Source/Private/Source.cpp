@@ -972,6 +972,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		auto& g1mm = G1MMs[i];
 		//Retrieve LOD and physics type from section 9 (MeshGroups)
 		std::set<uint32_t> submeshesIndex; //Keep track of all the indices of submeshes from LOD0
+		std::map<uint32_t,uint32_t> lodMap;
 		std::map<uint32_t,bool> bIsPhysType1; //NUN meshes. We could replace maps by vectors but we're not sure if indices are always ordered
 		std::map<uint32_t,bool> bIsPhysType2; //"Danglies" (hair strands etc)
 		std::map<uint32_t, int32_t> nunMapJointIndex;
@@ -987,6 +988,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 						for (auto& index : mesh.indices)
 						{
 							submeshesIndex.insert(index); //Filter all submeshes that need to be rendered
+							lodMap[index] = group.LOD;
 							bIsPhysType1[index] = mesh.meshType == 1;
 							bIsPhysType2[index] = mesh.meshType == 2;
 							if (bIsPhysType1[index] && joints) //Only NUNMeshes, avoid crashing on SOFT. Only if NUN nodes have been parsed
@@ -1045,7 +1047,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 			
 			//submesh name
 			char mesh_name[128];
-			snprintf(mesh_name, 128, "model_%d_submesh_%d", i, smIdx);
+			if (bLoadAllLODs)
+				snprintf(mesh_name, 128, "model_%d_submesh_%d_LOD%d", i, smIdx, lodMap[smIdx]);
+			else
+				snprintf(mesh_name, 128, "model_%d_submesh_%d", i, smIdx);
 			rapi->rpgSetName(mesh_name);
 
 			//Material info
