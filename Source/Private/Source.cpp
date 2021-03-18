@@ -1679,6 +1679,19 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				}
 			}
 
+			//Skinning for submesh type 55
+			if (submesh.submeshType == 55)
+			{
+				int size = submesh.vertexCount;
+				BYTE* jointIBFinal = (BYTE*)rapi->Noesis_PooledAlloc(sizeof(char) * size);
+				memset(jointIBFinal, 0, size);
+				rapi->rpgBindBoneIndexBuffer(jointIBFinal, RPGEODATA_UBYTE, 1, 1);
+
+				BYTE* jointWBFinal = (BYTE*)rapi->Noesis_PooledAlloc(sizeof(char) * size);
+				memset(jointWBFinal, 255, size);
+				rapi->rpgBindBoneWeightBuffer(jointWBFinal, RPGEODATA_UBYTE, 1, 1);
+			}
+
 			//Joint map if relevant
 			if (jointMap)
 				rapi->rpgSetBoneMap(jointMap);
