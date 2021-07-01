@@ -1403,6 +1403,17 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				float* posB = (float*)(controlPointsWeightsSet1);
 				RichVec3 u1, u2, u3, u4, v1, v2, v3, v4;
 				RichVec4 centerOfMassWVec1, centerOfMassWVec2, controlPCMWVec1, controlPCMWVec2;
+
+				//Weight/Joint buffers that will be updated with non zero weights for skinned cloth parts.
+				BYTE* jointWBFinal = (BYTE*)rapi->Noesis_PooledAlloc(sizeof(float) *4* phys1Count);
+				memset(jointWBFinal, 0, sizeof(float) * 4 * phys1Count);
+				float* dstW = (float*)jointWBFinal;
+				BYTE* jointIBFinal = (BYTE*)rapi->Noesis_PooledAlloc(sizeof(uint16_t) * 4 * phys1Count);
+				memset(jointIBFinal, 0, sizeof(uint16_t) * 4 * phys1Count);
+				uint16_t* dstIS = (uint16_t*)jointIBFinal;
+				uint8_t* dstIB = (uint8_t*)jointIBFinal;
+				bool bHasSkinnedParts = false;
+
 				//We're just going to rewrite the posBuffer then feed it.
 				for (auto j = 0; j < phys1Count; j++)
 				{
@@ -1531,7 +1542,18 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 						LITTLE_BIG_SWAP(depth);
 					}
 					if (c.Length() == 0) //Should probably check it at the start of the for loop for better performance. Oh well
+					{
 						transformPosF<bBigEndian>(controlPointsWeightsSet1 + index, 1, phys1Stride, &CPSet->eData.parent->mat);
+						bHasSkinnedParts = true;
+						for (auto k = 0; k < 4; k++)
+						{
+							dstW[4 * j + k] = centerOfMassWVec1[k];
+							if (cPIdx1Type == VADataType_UByte_x4)
+								dstIB[4 * j + k] = *(uint8_t*)(controlPointRelativeIndices1 + index + k);
+							else if (cPIdx1Type == VADataType_UShort_x4)
+								dstIS[4*j +k] = *(uint16_t*)(controlPointRelativeIndices1 + index + k);
+						}
+					}
 					else
 					{
 						RichVec3 d = b.Cross(c);
@@ -1547,7 +1569,12 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					}
 				}
 				rapi->rpgBindPositionBuffer(controlPointsWeightsSet1, RPGEODATA_FLOAT, phys1Stride);
-				rapi->rpgBindNormalBuffer(depthFromDriver, RPGEODATA_FLOAT, phys1Stride);
+				rapi->rpgBindNormalBuffer(nullptr, RPGEODATA_FLOAT, phys1Stride);
+				if (bHasSkinnedParts)
+				{
+					rapi->rpgBindBoneIndexBuffer(jointIBFinal, cPIdx1Type == VADataType_UByte_x4 ? RPGEODATA_UBYTE : RPGEODATA_USHORT, cPIdx1Type == VADataType_UByte_x4 ? 4 : 8, 4);
+					rapi->rpgBindBoneWeightBuffer(jointWBFinal, RPGEODATA_FLOAT, 16, 4);
+				}
 			}
 
 			//Transforming vertices for Cloth type 2
