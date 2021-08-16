@@ -10,14 +10,14 @@ void AlignOffset(uint32_t& offset, int n)
 		offset += (n - a);
 }
 
-void RevAlignOffset(uint32_t& offset, int n)
+void RevAlignOffset(uint32_t & offset, int n)
 {
 	int a = offset % n;
 	if (offset % n)
 		offset -= a;
 }
 
-void function1(std::array<uint64_t,4>& quantizedData, RichVec3& result, float currentTime, float totalTime)
+void function1(std::array<uint64_t, 4> & quantizedData, RichVec3 & result, float currentTime, float totalTime)
 {
 	float time_pc = currentTime / totalTime;
 	float time_squared = time_pc * time_pc;
@@ -28,7 +28,7 @@ void function1(std::array<uint64_t,4>& quantizedData, RichVec3& result, float cu
 	uint64_t row3 = quantizedData[0x2];
 	uint64_t row4 = quantizedData[0x3];
 
-	float x, y, z, w ;
+	float x, y, z, w;
 	uint32_t a, b, c, d;
 	a = ((row1 >> 0x25) & 0x7800000) + 0x32000000;
 	b = ((row2 >> 0x25) & 0x7800000) + 0x32000000;
@@ -53,7 +53,7 @@ void function1(std::array<uint64_t,4>& quantizedData, RichVec3& result, float cu
 		(float)(int32_t)(row3 << 12) * z * time_squared;
 }
 
-void function2(RichVec3& vec, RichQuat& quat)
+void function2(RichVec3 & vec, RichQuat & quat)
 {
 	float angle = sqrt(vec.v[0] * vec.v[0] + vec.v[1] * vec.v[1] + vec.v[2] * vec.v[2]);
 	float s = sin(angle * 0.5);
@@ -69,13 +69,13 @@ void function2(RichVec3& vec, RichQuat& quat)
 		quat.q[0] = vec.v[0] * 0.5;
 		quat.q[1] = vec.v[1] * 0.5;
 		quat.q[2] = vec.v[2] * 0.5;
-		
+
 	}
 	quat.q[3] = c;
 }
 
-void function3(std::vector<std::vector<std::array<float, 4>>>& chanValues, std::vector<std::vector<float>>& chanTimes,uint32_t index, uint32_t componentCount,
-	std::set<float>& allTimes, std::vector<float>& allValues, uint32_t& stride)
+void function3(std::vector<std::vector<std::array<float, 4>>> & chanValues, std::vector<std::vector<float>> & chanTimes, uint32_t index, uint32_t componentCount,
+	std::set<float> & allTimes, std::vector<float> & allValues, uint32_t & stride)
 {
 	for (auto u = 0; u < componentCount; u++)
 	{
@@ -117,14 +117,14 @@ void function3(std::vector<std::vector<std::array<float, 4>>>& chanValues, std::
 
 }
 
-bool has_suffix(const std::string& str, const std::string& suffix)
+bool has_suffix(const std::string & str, const std::string & suffix)
 {
 	return str.size() >= suffix.size() &&
 		str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 template<bool bBigEndian>
-void transformPosF(BYTE* posBuffer, int vertexCount, int stride, modelMatrix_t* mat)
+void transformPosF(BYTE * posBuffer, int vertexCount, int stride, modelMatrix_t * mat)
 {
 	for (int i = 0; i < vertexCount; i++)
 	{
@@ -146,13 +146,13 @@ void transformPosF(BYTE* posBuffer, int vertexCount, int stride, modelMatrix_t* 
 }
 
 template<bool bBigEndian>
-void transformPosHF(BYTE* hfposBuffer, BYTE* posBuffer, int vertexCount, int stride, modelMatrix_t* mat =nullptr)
+void transformPosHF(BYTE * hfposBuffer, BYTE * posBuffer, int vertexCount, int stride, modelMatrix_t * mat = nullptr)
 {
 	float* dst = (float*)posBuffer;
-	
+
 	for (int i = 0; i < vertexCount; i++)
-	{	
-		uint16_t* src = (uint16_t*)(hfposBuffer + stride*i);
+	{
+		uint16_t* src = (uint16_t*)(hfposBuffer + stride * i);
 		float tmp1[3];
 		float tmp2[3];
 		if (bBigEndian)
@@ -172,7 +172,7 @@ void transformPosHF(BYTE* hfposBuffer, BYTE* posBuffer, int vertexCount, int str
 		}
 		else
 		{
-			g_mfn->Math_VecCopy(tmp1, dst + 3*i);
+			g_mfn->Math_VecCopy(tmp1, dst + 3 * i);
 		}
 
 		if (bBigEndian)
@@ -185,12 +185,12 @@ void transformPosHF(BYTE* hfposBuffer, BYTE* posBuffer, int vertexCount, int str
 }
 
 template<bool bBigEndian>
-void skinSMeshW(BYTE* jointWB, EG1MGVADatatype jointWBType, BYTE* jointWB2, EG1MGVADatatype jointWB2Type,BYTE* finaljointWB, int vertexCount, int stride, bool bHas8Weights)
+void skinSMeshW(BYTE * jointWB, EG1MGVADatatype jointWBType, BYTE * jointWB2, EG1MGVADatatype jointWB2Type, BYTE * finaljointWB, int vertexCount, int stride, bool bHas8Weights)
 {
 	float* dstW = (float*)finaljointWB;
 	int dstOff = bHas8Weights ? 8 : 4;
 	memset(dstW, 0, dstOff * sizeof(float) * vertexCount);
-	
+
 	//Weight 1st layer
 	if (!jointWB) //sometimes only bone indices and no weights, in that case assume a weight of 1 on the first one.
 	{
@@ -226,7 +226,7 @@ void skinSMeshW(BYTE* jointWB, EG1MGVADatatype jointWBType, BYTE* jointWB2, EG1M
 					dstW[dstOff * i + maxWBID] = 0;
 				if (bBigEndian)
 				{
-					for (auto j = 0; j < maxWBID+1; j++)
+					for (auto j = 0; j < maxWBID + 1; j++)
 						LITTLE_BIG_SWAP(dstW[dstOff * i + j]);
 				}
 			}
@@ -535,7 +535,7 @@ void skinSMeshW(BYTE* jointWB, EG1MGVADatatype jointWBType, BYTE* jointWB2, EG1M
 }
 
 template<bool bBigEndian>
-void genColor3F(BYTE* buffer, BYTE* finalBuffer, int vertexCount, int stride)
+void genColor3F(BYTE * buffer, BYTE * finalBuffer, int vertexCount, int stride)
 {
 	float* dst = (float*)finalBuffer;
 
@@ -564,7 +564,7 @@ void genColor3F(BYTE* buffer, BYTE* finalBuffer, int vertexCount, int stride)
 	}
 }
 
-void createDriverVertexBuffers(mesh_t& dMesh, uint32_t cpSize, std::vector<void*>& unpooledBufs, noeRAPI_t* rapi)
+void createDriverVertexBuffers(mesh_t & dMesh, uint32_t cpSize, std::vector<void*> & unpooledBufs, noeRAPI_t * rapi)
 {
 	dMesh.posBuffer.address = (BYTE*)rapi->Noesis_UnpooledAlloc(sizeof(float) * 3 * cpSize);
 	unpooledBufs.push_back(dMesh.posBuffer.address);
@@ -586,7 +586,7 @@ void createDriverVertexBuffers(mesh_t& dMesh, uint32_t cpSize, std::vector<void*
 	float* bWB = (float*)dMesh.blendWeightsBuffer.address;
 }
 
-void createDriverIndexBuffers(mesh_t& dMesh, std::vector<RichVec3> polys, std::vector<void*>& unpooledBufs, noeRAPI_t* rapi)
+void createDriverIndexBuffers(mesh_t & dMesh, std::vector<RichVec3> polys, std::vector<void*> & unpooledBufs, noeRAPI_t * rapi)
 {
 	dMesh.indexBuffer.address = (BYTE*)rapi->Noesis_UnpooledAlloc(sizeof(uint16_t) * 3 * polys.size());
 	unpooledBufs.push_back(dMesh.indexBuffer.address);
@@ -602,164 +602,7 @@ void createDriverIndexBuffers(mesh_t& dMesh, std::vector<RichVec3> polys, std::v
 	}
 }
 
-//Many thanks to OnePieceFreak for the implementation example
-void _3DS_Decompress(BYTE* source, BYTE* dest, int w , int h, int hasAlpha)
-{
-	uint64_t block;
-	uint64_t alpha;
-	uint32_t pixels[4 * 4];
-	int i, j, n, x, y, count;
-	float percent;
-	uint32_t* ptr;
-	uint32_t offset = 0;
-	uint32_t* buffer = (uint32_t*)dest;
-
-	if (hasAlpha == 0) {
-		for (j = 0; j < h / 8; j++) {
-			for (i = 0; i < w / 8; i++) {
-
-				//block 1
-				memcpy(&block, source + offset, 8);
-				offset += 8;
-				LITTLE_BIG_SWAP(block);
-				rg_etc1::unpack_etc1_block(&block, pixels, false);
-				ptr = pixels;
-				for (x = 0; x < 4; x++)
-					for (y = 0; y < 4; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] = *(ptr++);
-					}
-
-				//block 2
-				memcpy(&block, source + offset, 8);
-				offset += 8;
-				LITTLE_BIG_SWAP(block);
-				rg_etc1::unpack_etc1_block(&block, pixels, false);
-				ptr = pixels;
-				for (x = 0; x < 4; x++)
-					for (y = 4; y < 8; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] = *(ptr++);
-					}
-
-				//block 3
-				memcpy(&block, source + offset, 8);
-				offset += 8;
-				LITTLE_BIG_SWAP(block);
-				rg_etc1::unpack_etc1_block(&block, pixels, false);
-				ptr = pixels;
-				for (x = 4; x < 8; x++)
-					for (y = 0; y < 4; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] = *(ptr++);
-					}
-
-				//block 4
-				memcpy(&block, source + offset, 8);
-				offset += 8;
-				LITTLE_BIG_SWAP(block);
-				rg_etc1::unpack_etc1_block(&block, pixels, false);
-				ptr = pixels;
-				for (x = 4; x < 8; x++)
-					for (y = 4; y < 8; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] = *(ptr++);
-					}
-			}
-		}
-	}
-	else
-	{
-		for (j = 0; j < h / 8; j++) {
-			for (i = 0; i < w / 8; i++) {
-
-				//block 1, alpha
-				memcpy(&alpha, source + offset, 8);
-				offset += 8;
-				for (x = 0; x < 4; x++) {
-					for (y = 0; y < 4; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (y * w + x)] = ((((alpha & 0xF) << 28) | ((alpha & 0xF) << 24)) & 0xFF000000);
-						alpha >>= 4;
-					}
-				}
-				//block 1, pixels
-				memcpy(&block, source + offset, 8);
-				offset += 8;
-				LITTLE_BIG_SWAP(block);
-				rg_etc1::unpack_etc1_block(&block, pixels, false);
-				ptr = pixels;
-				for (x = 0; x < 4; x++)
-					for (y = 0; y < 4; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] |= (*(ptr++) & 0xFFFFFF);
-					}
-
-
-
-				//block 2, alpha
-				memcpy(&alpha, source + offset, 8);
-				offset += 8;
-				for (x = 4; x < 8; x++) {
-					for (y = 0; y < 4; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (y * w + x)] = ((((alpha & 0xF) << 28) | ((alpha & 0xF) << 24)) & 0xFF000000);
-						alpha >>= 4;
-					}
-				}
-				//block 2, pixels
-				memcpy(&block, source + offset, 8);
-				offset += 8;
-				LITTLE_BIG_SWAP(block);
-				rg_etc1::unpack_etc1_block(&block, pixels, false);
-				ptr = pixels;
-				for (x = 0; x < 4; x++)
-					for (y = 4; y < 8; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] |= (*(ptr++) & 0xFFFFFF);
-					}
-
-
-				//block 3, alpha
-				memcpy(&alpha, source + offset, 8);
-				offset += 8;
-				for (x = 0; x < 4; x++) {
-					for (y = 4; y < 8; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (y * w + x)] = ((((alpha & 0xF) << 28) | ((alpha & 0xF) << 24)) & 0xFF000000);
-						alpha >>= 4;
-					}
-				}
-				//block 3, pixels
-				memcpy(&block, source + offset, 8);
-				offset += 8;
-				LITTLE_BIG_SWAP(block);
-				rg_etc1::unpack_etc1_block(&block, pixels, false);
-				ptr = pixels;
-				for (x = 4; x < 8; x++)
-					for (y = 0; y < 4; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] |= (*(ptr++) & 0xFFFFFF);
-					}
-
-
-
-				//block 4, alpha
-				memcpy(&alpha, source + offset, 8);
-				offset += 8;
-				for (x = 4; x < 8; x++) {
-					for (y = 4; y < 8; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (y * w + x)] = ((((alpha & 0xF) << 28) | ((alpha & 0xF) << 24)) & 0xFF000000);
-						alpha >>= 4;
-					}
-				}
-				//block 4, pixels
-				memcpy(&block, source + offset, 8);
-				offset += 8;
-				LITTLE_BIG_SWAP(block);
-				rg_etc1::unpack_etc1_block(&block, pixels, false);
-				ptr = pixels;
-				for (x = 4; x < 8; x++)
-					for (y = 4; y < 8; y++) {
-						buffer[(j * 8 * w) + (i * 8) + (x * w + y)] |= (*(ptr++) & 0xFFFFFF);
-					}
-
-			}
-		}
-	}
-}
-
-void flip_vertically(BYTE* pixels, const size_t width, const size_t height, const size_t bytes_per_pixel)
+void flip_vertically(BYTE * pixels, const size_t width, const size_t height, const size_t bytes_per_pixel)
 {
 	const size_t stride = width * bytes_per_pixel;
 	BYTE* row = (BYTE*)malloc(stride);
@@ -775,4 +618,3 @@ void flip_vertically(BYTE* pixels, const size_t width, const size_t height, cons
 }
 
 #endif // !UTILS_H
-

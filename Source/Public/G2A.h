@@ -4,11 +4,11 @@
 #define G2A_H
 
 //helper struct cause pointers become invalid after push_backs
-struct keyFramedValueIndex 
+struct keyFramedValueIndex
 {
-	int32_t rotIndex =-1;
-	int32_t posIndex=-1;
-	int32_t scaleIndex=-1;
+	int32_t rotIndex = -1;
+	int32_t posIndex = -1;
+	int32_t scaleIndex = -1;
 };
 
 template<bool bBigEndian>
@@ -21,11 +21,13 @@ struct G2AHeader
 	uint32_t entryCount;
 	uint32_t boneInfoCount;
 	bool bIsG2A5;
+	bool bIsG2A4;
 	G2AHeader(BYTE* buffer, int bufferLen, uint32_t& offset)
 	{
 		GResourceHeader<bBigEndian> sectionHeader = reinterpret_cast<GResourceHeader<bBigEndian>*>(buffer);
 		offset += sizeof(GResourceHeader<bBigEndian>);
 		bIsG2A5 = sectionHeader.chunkVersion == 0x30303530 ? true : false;
+		bIsG2A4 = sectionHeader.chunkVersion == 0x30303430 ? true : false;
 		framerate = *(float*)(buffer + offset);
 		if (bBigEndian)
 			LITTLE_BIG_SWAP(framerate);
@@ -54,7 +56,7 @@ struct G2AHeader
 		}
 		offset += 8;
 		boneInfoCount = boneInfoSectionSize >> 2;
-		if (bIsG2A5)
+		if (bIsG2A5 || bIsG2A4)
 			offset += 4;
 	}
 };
@@ -62,8 +64,8 @@ struct G2AHeader
 template<bool bBigEndian>
 struct G2A
 {
-	G2A(BYTE* buffer, int bufferLen,std::string& animName ,modelBone_t* joints,int jointCount, std::map<uint32_t, uint32_t>& globalToFinal, CArrayList<noesisAnim_t*>& animList,
-		std::vector<void*>& pointersToFree,int& framerate,bool bAdditive, noeRAPI_t* rapi)
+	G2A(BYTE* buffer, int bufferLen, std::string& animName, modelBone_t* joints, int jointCount, std::map<uint32_t, uint32_t>& globalToFinal, CArrayList<noesisAnim_t*>& animList,
+		std::vector<void*>& pointersToFree, int& framerate, bool bAdditive, noeRAPI_t* rapi)
 	{
 		uint32_t offset = 0;
 		G2AHeader<bBigEndian> header = G2AHeader<bBigEndian>(buffer, bufferLen, offset);
@@ -116,15 +118,15 @@ struct G2A
 			kfBone.rotationType = NOEKF_ROTATION_QUATERNION_4;
 			kfBone.scaleType = NOEKF_SCALE_VECTOR_3;
 			keyFramedValueIndex valueIndex;
-			if(bAdditive)
+			if (bAdditive)
 				kfBone.flags |= KFBONEFLAG_ADDITIVE; //simply premultiply by bind matrix, see python script to see how done manually
-			
+
 
 			//Getting data
 			for (auto j = 0; j < splineTypeCount; j++)
 			{
 				std::vector<uint16_t> keyFrameTimings;
-				std::vector<std::array<uint64_t,4>> quantizedData;
+				std::vector<std::array<uint64_t, 4>> quantizedData;
 				uint16_t opcode = *(uint16_t*)(buffer + offset);
 				uint16_t keyFrameCount = *(uint16_t*)(buffer + offset + 2);
 				uint32_t firstDataIndex = *(uint32_t*)(buffer + offset + 4);
@@ -157,7 +159,7 @@ struct G2A
 							LITTLE_BIG_SWAP(v);
 					}
 				}
-
+				bool bNeedsExtra = false;
 				uint32_t helper = keyFramedValues.size();
 				if (keyFrameCount == 1)
 				{
@@ -180,7 +182,7 @@ struct G2A
 					else if (opcode == 1) //position
 					{
 						kfBone.numTranslationKeys++;
-						function1(quantizedData[0], temp1,0, 1);
+						function1(quantizedData[0], temp1, 0, 1);
 						for (auto& v : temp1.v)
 							animationData.push_back(std::move(v));
 						noeKeyFrameData_t noeKfValue;
@@ -202,7 +204,11 @@ struct G2A
 						keyFramedValues.push_back(std::move(noeKfValue));
 					}
 				}
-
+				else if (keyFrameTimings.back() != header.animationLength)
+				{
+					keyFrameTimings.push_back(header.animationLength);
+					bNeedsExtra = true;
+				}
 
 				for (auto k = 0; k < keyFrameCount - 1; k++)
 				{
@@ -225,7 +231,7 @@ struct G2A
 							noeKfValue.time = (keyframe1 + l) / header.framerate;
 							noeKfValue.dataIndex = animationData.size() - 4;
 							keyFramedValues.push_back(std::move(noeKfValue));
-						}						
+						}
 					}
 					else if (opcode == 1) //position
 					{
@@ -292,7 +298,7 @@ struct G2A
 				kfBone.scaleKeys = &keyFramedValues[valueIndex.scaleIndex];
 		}
 
-		noeKeyFramedAnim_t* keyFramedAnim = (noeKeyFramedAnim_t*)(rapi->Noesis_UnpooledAlloc(sizeof(noeKeyFramedAnim_t)));
+		noeKeyFramedAnim_t * keyFramedAnim = (noeKeyFramedAnim_t*)(rapi->Noesis_UnpooledAlloc(sizeof(noeKeyFramedAnim_t)));
 		pointersToFree.push_back(keyFramedAnim);
 		memset(keyFramedAnim, 0, sizeof(noeKeyFramedAnim_t));
 		//Animation data
@@ -306,8 +312,8 @@ struct G2A
 
 		framerate = header.framerate;
 
-		noesisAnim_t* noeAnim = rapi->Noesis_AnimFromBonesAndKeyFramedAnim(joints, jointCount, keyFramedAnim, true);
-		
+		noesisAnim_t * noeAnim = rapi->Noesis_AnimFromBonesAndKeyFramedAnim(joints, jointCount, keyFramedAnim, true);
+
 		if (noeAnim)
 		{
 			noeAnim->filename = rapi->Noesis_PooledString(const_cast<char*>(animName.c_str()));
@@ -322,7 +328,7 @@ struct G2A
 
 			animList.Append(noeAnim);
 
-			
+
 		}
 	}
 };

@@ -122,10 +122,6 @@ struct G1T
 		typedef void(*NoesisMisc_Untile1dThin_p)(uint8_t * pDest, const uint32_t destSize, const uint8_t * pSrc, const uint32_t srcSize, const uint32_t w, const uint32_t h, const uint32_t bitsPerTexel,bool isBC, noeRAPI_t * pRapi);
 		NoesisMisc_Untile1dThin_p NoesisMisc_Untile1dThin = NULL;
 		NoesisMisc_Untile1dThin = (NoesisMisc_Untile1dThin_p)g_nfn->NPAPI_GetUserExtProc("NoesisMisc_Untile1dThin");
-		//ETC
-		typedef void(*NoesisMisc_ETC_DecodeRaw32_p)(void* pDst, const void* pSrc, const int srcSize, const int width, const int height, const char* pFmt);
-		NoesisMisc_ETC_DecodeRaw32_p NoesisMisc_ETC_DecodeRaw32 = NULL;
-		NoesisMisc_ETC_DecodeRaw32 = (NoesisMisc_ETC_DecodeRaw32_p)g_nfn->NPAPI_GetUserExtProc("NoesisMisc_ETC_DecodeRaw32");
 
 		//Process textures
 		for (auto i =0;i<offsetList.size(); i++)
@@ -137,6 +133,7 @@ struct G1T
 			bool bNormalized = true;
 			bool bSpecialCaseETC = false;
 			bool b3DSAlpha = false;
+			bool bETCAlpha = false;
 			std::string rawFormat ="";
 			int fourccFormat = -1;
 
@@ -219,7 +216,6 @@ struct G1T
 			case 0x47:
 				rawFormat = "3DS_rgb";
 				computedSize = width * height * 4;
-				b3DSAlpha = false;
 				break;
 			case 0x48:
 				rawFormat = "3DS_rgb";
@@ -288,6 +284,11 @@ struct G1T
 				if (i < offsetList.size() - 1)
 					offsetList[i + 1] = offsetList[i] + texHeader.headerSize + computedSize;
 				break;
+			case 0x71:
+				rawFormat = "ETC1_rgba";
+				computedSize = width * height;
+				bETCAlpha = true;
+				break;
 			default:
 				break;
 			}
@@ -331,6 +332,9 @@ struct G1T
 					else
 						NoesisMisc_Untile1dThin(untiledTexData, dataSize, buffer + offset, dataSize, width, height, mortonWidth, 1, rapi);
 					break;
+				case EG1TPlatform::NWiiU:
+					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+					break;
 				default:
 					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
 					if (bRaw)
@@ -345,7 +349,13 @@ struct G1T
 			if (!rawFormat.rfind("ETC",0))
 			{
 				untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize*8);
-				NoesisMisc_ETC_DecodeRaw32(untiledTexData, buffer + offset, dataSize, width, height, "rgb");
+				if (bETCAlpha)
+				{
+					rapi->Image_DecodeETC(untiledTexData, buffer + offset, dataSize, width, height, "RGBA");
+					dataSize *= 8;
+				}
+				else
+					rapi->Image_DecodeETC(untiledTexData, buffer + offset, dataSize, width, height, "RGB");
 				if (bSpecialCaseETC)
 				{
 					height /= 2;
@@ -361,7 +371,7 @@ struct G1T
 			if (!rawFormat.rfind("3DS", 0))
 			{
 				untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(width * height * 16);
-				_3DS_Decompress(buffer + offset, untiledTexData, width, height, b3DSAlpha);
+				rapi->Image_DecodePICA200ETC(untiledTexData, buffer + offset, width, height, b3DSAlpha,0,0);
 				flip_vertically(untiledTexData, width, height, 4);
 				rawFormat = "r8g8b8a8";
 			}

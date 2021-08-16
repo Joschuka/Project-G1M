@@ -9,13 +9,13 @@
 #include <set>
 #include <array>
 
-#include "../Public/rg_etc1.h"
 #include "../Public/G1M.h"
 #include "../Public/G1T.h"
 #include "../Public/Utils.h"
 #include "../Public/Oid.h"
 #include "../Public/G2A.h"
 #include "../Public/G1A.h"
+#include "../Public/OBJD.h"
 
 const char* g_pPluginName = "ProjectG1M";
 const char* g_pPluginDesc = "G1M Noesis plugin";
@@ -69,17 +69,42 @@ bool LoadTexture(BYTE* fileBuffer, int bufferLen, CArrayList<noesisTex_t*>& noeT
 template<bool bBigEndian>
 noesisModel_t* LoadModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* rapi)
 {
-	return ProcessModel<bBigEndian>(fileBuffer, bufferLen, numMdl, rapi, false);
+	//Awful way to do this
+	std::map<uint32_t, std::vector<BYTE*>> bundleIDtoG1MOffsets;
+	std::map<uint32_t, std::vector<uint32_t>> bundleIDtoG1MSizes;
+	std::map<uint16_t, std::pair<uint8_t, uint16_t>> section1IDToBundleG1MID;
+	std::vector<std::pair<uint16_t, modelMatrix_t>> entityMatrices;
+	return ProcessModel<bBigEndian>(fileBuffer, bufferLen, numMdl, rapi, false, bundleIDtoG1MOffsets, bundleIDtoG1MSizes, section1IDToBundleG1MID, entityMatrices);
 }
 
 template<bool bBigEndian>
 noesisModel_t* LoadMap(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* rapi)
 {
-	return ProcessModel<bBigEndian>(fileBuffer, bufferLen, numMdl, rapi, true);
+	//Parse OBJD, only grab relevant information
+	OBJD<bBigEndian> objd = OBJD<bBigEndian>(fileBuffer, bufferLen);
+	std::map<uint32_t,std::vector<BYTE*>> bundleIDtoG1MOffsets;
+	std::map<uint32_t, std::vector<uint32_t>> bundleIDtoG1MSizes;
+	//Prompt for datatable with bundle
+	int datatableBufLength;
+	char datatablePath[MAX_NOESIS_PATH];
+	BYTE* datatableBuf = nullptr;
+	datatableBuf = rapi->Noesis_LoadPairedFile(rapi->Noesis_PooledString(const_cast<char*>("Select paired datatable file")),
+		rapi->Noesis_PooledString(const_cast<char*>(".datatable")), datatableBufLength, datatablePath);
+	if (datatableBuf && datatableBufLength > 0)
+	{
+		if (!UnpackBundles<bBigEndian>(datatableBuf,datatableBufLength, bundleIDtoG1MOffsets, bundleIDtoG1MSizes))
+			return nullptr;
+	}
+	noesisModel_t* mdlResult = ProcessModel<bBigEndian>(fileBuffer, bufferLen, numMdl, rapi, true, bundleIDtoG1MOffsets, bundleIDtoG1MSizes, objd.section1IDToBundleG1MID, objd.entityMatrices);
+	rapi->Noesis_UnpooledFree(datatableBuf);
+	datatableBuf = nullptr;
+	return mdlResult;
 }
 
 template<bool bBigEndian>
-noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* rapi, bool bHasList)
+noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* rapi, bool bIsMap,
+	std::map<uint32_t, std::vector<BYTE*>>& bundleIDtoG1MOffsets, std::map<uint32_t, std::vector<uint32_t>>& bundleIDtoG1MSizes,
+	std::map<uint16_t, std::pair<uint8_t, uint16_t>>& section1IDToBundleG1MID, std::vector<std::pair<uint16_t, modelMatrix_t>>& entityMatrices)
 {
 	//Bool to check what kind of merge
 	bool bMergeSeveralInternals;
@@ -155,33 +180,21 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	RichMat43 rootCoords;
 	
 	void* ctx = rapi->rpgCreateContext(); //Create context
+	int g1mCount = 0;
 	
-	if (bHasList)
+	if (bIsMap)
 	{
-		uint32_t offset = 0;
-		uint32_t entryCount = *(uint32_t*)(fileBuffer);
-		offset += 4;
-		for (auto i = 0; i < entryCount; i++)
+		//Go through all the objd section 2 entries
+		for (const auto& matInfo : entityMatrices)
 		{
-			uint32_t temp = *(uint32_t*)(fileBuffer + offset);
-			LITTLE_BIG_SWAP(temp);
-			std::stringstream stream;
-			stream << std::hex << temp;
-			std::string filename = "D:\\Datamine backup\\AocExtract\\FieldEditor4\\g1m\\" + std::string(8 - stream.str().length(), '0') + stream.str() + ".g1m";
-			std::filesystem::path filePath = std::filesystem::path(filename);
-			if (std::filesystem::exists(filePath))
-			{
-				offset += 4;
-				g1mPaths.push_back(filePath.string());
-				mapPositions.push_back(RichVec3((float*)(fileBuffer + offset)));
-				mapRotations.push_back(RichQuat((float*)(fileBuffer + offset + 12)));
-				offset += 28;
-			}
-			else
-			{
-				offset += 32;
-			}
-			
+			//Retrieve info
+			uint8_t bundleID = section1IDToBundleG1MID[matInfo.first].first;
+			uint16_t g1mID = section1IDToBundleG1MID[matInfo.first].second;
+			mapMatrices.push_back(matInfo.second);
+
+			fileBuffers.push_back(bundleIDtoG1MOffsets[bundleID][g1mID]);
+			fileLengths.push_back(bundleIDtoG1MSizes[bundleID][g1mID]);
+			g1mCount++;
 		}
 	}
 	else
@@ -220,7 +233,6 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	}
 
 	//Prepare buffers and get the lengths
-	int g1mCount = 0;
 	for (const auto& p : g1mPaths)
 	{
 		int length;
@@ -229,12 +241,12 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		{
 			fileBuffers.push_back(fb);
 			fileLengths.push_back(length);
-			if (bHasList)
+			/*if (bHasList)
 			{
 				modelMatrix_t mat = mapRotations[g1mCount].ToMat43().GetTranspose().m;
 				g_mfn->Math_VecCopy(mapPositions[g1mCount].v, mat.o);
 				mapMatrices.push_back(mat);
-			}
+			}*/
 		}
 		g1mCount++;
 	}
@@ -563,6 +575,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				joint->mat = s.joints[idx].rotation.ToMat43().GetInverse().m;
 				g_mfn->Math_VecCopy(s.joints[idx].position.v, joint->mat.o);
 				jointIndex += 1;
+				joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
+				joint->eData.mpDebug->mPointColor[0] = 0;
+				joint->eData.mpDebug->mPointColor[1] = 1;
+				joint->eData.mpDebug->mPointColor[2] = 0;
 			}
 		}
 
@@ -587,6 +603,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				joint->mat = s.joints[idx].rotation.ToMat43().GetInverse().m;
 				g_mfn->Math_VecCopy(s.joints[idx].position.v, joint->mat.o);
 				jointIndex += 1;
+				joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
+				joint->eData.mpDebug->mPointColor[0] = 0;
+				joint->eData.mpDebug->mPointColor[1] = 1;
+				joint->eData.mpDebug->mPointColor[2] = 0;
 			}
 		}
 
@@ -643,6 +663,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					snprintf(joint->name, 128, "nuno1_p_%d_bone_%d", nunParentJointID, jointIndex);
 					joint->index = jointIndex;
 					joint->eData.parent = joints + parentID;
+					joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
+					joint->eData.mpDebug->mPointColor[0] = 0;
+					joint->eData.mpDebug->mPointColor[1] = 0;
+					joint->eData.mpDebug->mPointColor[2] = 1;
 
 					//Driver mesh buffers
 					RichMat43 mat4 = RichMat43(joints[jointIndex].mat);
@@ -714,6 +738,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					snprintf(joint->name, 128, "nuno3_p_%d_bone_%d", nunParentJointID,jointIndex);
 					joint->index = jointIndex;
 					joint->eData.parent = joints + parentID;
+					joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
+					joint->eData.mpDebug->mPointColor[0] = 0;
+					joint->eData.mpDebug->mPointColor[1] = 0;
+					joint->eData.mpDebug->mPointColor[2] = 1;
 
 					//Driver mesh buffers
 					RichMat43 mat4 = RichMat43(joints[jointIndex].mat);
@@ -790,6 +818,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					snprintf(joint->name, 128, "nunv1_p_%d_bone_%d", nunParentJointID, jointIndex);
 					joint->index = jointIndex;
 					joint->eData.parent = joints + parentID;
+					joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
+					joint->eData.mpDebug->mPointColor[0] = 0;
+					joint->eData.mpDebug->mPointColor[1] = 0;
+					joint->eData.mpDebug->mPointColor[2] = 1;
 
 					//Driver mesh buffers
 					RichMat43 mat4 = RichMat43(joints[jointIndex].mat);
@@ -865,6 +897,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					snprintf(joint->name, 128, "nuns1_p_%d_bone_%d", nunParentJointID, jointIndex);
 					joint->index = jointIndex;
 					joint->eData.parent = joints + parentID;
+					joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
+					joint->eData.mpDebug->mPointColor[0] = 0;
+					joint->eData.mpDebug->mPointColor[1] = 0;
+					joint->eData.mpDebug->mPointColor[2] = 1;
 
 					//Driver mesh buffers
 					RichMat43 mat4 = RichMat43(joints[jointIndex].mat);
@@ -1725,7 +1761,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 			//Semantic buffers set, index buffer left
 			{
-				if (bHasList)
+				if (bIsMap)
 					rapi->rpgSetTransform(&mapMatrices[i]);
 				switch (submesh.indexBufferPrimType)
 				{
@@ -1824,7 +1860,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	}
 
 	//Freeing file buffers
-	if (bMerge)
+	if (bMerge && !bIsMap)
 	{
 		for (auto& f : fileBuffers)
 		{
@@ -1897,7 +1933,7 @@ bool NPAPI_InitLocal(void)
 	if (fTHandleBE < 0)
 		return false;
 	//Map handlers
-	int fMHandle = g_nfn->NPAPI_Register((char*)"RDMap File (Little Endian)", (char*) ".rdmap");
+	int fMHandle = g_nfn->NPAPI_Register((char*)"Map file (Little Endian)", (char*) ".objd");
 	if (fMHandle < 0)
 		return false;
 
