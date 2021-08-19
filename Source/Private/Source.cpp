@@ -1836,23 +1836,40 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	if (!mdl) 
 	{
 		//Bit of a dirty workaround if a model has bones but no geometry
-		/*if (joints)
+		if (joints)
 		{
 			rapi->rpgSetExData_Bones(joints, jointIndex);
-			BYTE* dummyPos = (BYTE*)rapi->Noesis_PooledAlloc(sizeof(float) * 6);
+			BYTE* dummyPos = (BYTE*)rapi->Noesis_PooledAlloc(sizeof(float) * jointIndex);
 			float* dst = (float*)dummyPos;
-			dst[0] = 0;
-			dst[1] = 0;
-			dst[2] = 0;
-			dst[3] = internalSkeletons.back().joints.back().position.v[1];
-			dst[4] = internalSkeletons.back().joints.back().position.v[0];
-			dst[5] = internalSkeletons.back().joints.back().position.v[2];
+			for (int i = 0; i < jointIndex; i++)
+			{
+				float src[3] = { 0, 0, 0 };
+				float tmp[3];
+				g_mfn->Math_TransformPointByMatrix(&joints[i].mat, src, tmp);
+				g_mfn->Math_VecCopy(tmp, dst + 3*i);
+				if (bBigEndian) {
+					LITTLE_BIG_SWAP(dst[3*i]);
+					LITTLE_BIG_SWAP(dst[3*i+1]);
+					LITTLE_BIG_SWAP(dst[3*i+2]);
+				}
+			}
+
+			BYTE* dummyTri = (BYTE*)rapi->Noesis_PooledAlloc(sizeof(uint16_t) * jointIndex);
+			uint16_t* dst2 = (uint16_t*)dummyTri;
+			for (int i = 0; i < jointIndex; i++)
+			{
+				dst2[3 * i] = i;
+				dst2[3 * i + 1] = i;
+				dst2[3 * i + 2] = i;
+			}
+			rapi->rpgClearBufferBinds();
+			rapi->rpgSetName("dummy");
 			rapi->rpgBindPositionBuffer(dst, RPGEODATA_FLOAT, 12);
-			rapi->rpgCommitTriangles(nullptr, RPGEODATA_USHORT, 2, RPGEO_POINTS, 0);
+			rapi->rpgCommitTriangles(dummyTri, RPGEODATA_USHORT, jointIndex * 3, RPGEO_TRIANGLE, 0);
 			mdl = rapi->rpgConstructModel();
 			if (mdl)
 				numMdl = 1;
-		}*/
+		}
 	}
 	else
 	{
