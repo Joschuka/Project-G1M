@@ -39,7 +39,3 @@
 .vs
 release
 debug
-
-# Noesis Folders
-Source/Private/Noesis
-Source/Public/Noesis
