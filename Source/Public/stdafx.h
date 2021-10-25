@@ -27,4 +27,4 @@
 // Windows Header Files:
 #include <windows.h>
 
-#include "../Public/Noesis/pluginshare.h"
+#include "../../../pluginshare.h""
