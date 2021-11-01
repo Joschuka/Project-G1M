@@ -11,6 +11,7 @@
 
 #include "../Public/G1M.h"
 #include "../Public/G1T.h"
+#include "../Public/KHM.h"
 #include "../Public/Utils.h"
 #include "../Public/Oid.h"
 #include "../Public/G2A.h"
@@ -50,6 +51,13 @@ bool CheckTexture(BYTE* fileBuffer, int bufferLen, noeRAPI_t* rapi)
 }
 
 template<bool bBigEndian>
+bool CheckHMTexture(BYTE* fileBuffer, int bufferLen, noeRAPI_t* rapi)
+{
+	uint8_t ed = *(uint8_t*)(fileBuffer + 1);
+	return !(bBigEndian ^ (ed == 0x48 ? true : false));
+}
+
+template<bool bBigEndian>
 bool CheckMap(BYTE* fileBuffer, int bufferLen, noeRAPI_t* rapi)
 {
 	if (bufferLen < 36)
@@ -62,6 +70,15 @@ bool LoadTexture(BYTE* fileBuffer, int bufferLen, CArrayList<noesisTex_t*>& noeT
 {
 	G1T<bBigEndian>(fileBuffer, bufferLen, noeTex, rapi);
 	if(!bNoTextureRename)
+		rapi->Noesis_ProcessCommands("-texnorepfn"); //avoid renaming of the first texture
+	return 1;
+}
+
+template<bool bBigEndian>
+bool LoadHMTexture(BYTE* fileBuffer, int bufferLen, CArrayList<noesisTex_t*>& noeTex, noeRAPI_t* rapi)
+{
+	KHM<bBigEndian>(fileBuffer, bufferLen, noeTex, rapi);
+	if (!bNoTextureRename)
 		rapi->Noesis_ProcessCommands("-texnorepfn"); //avoid renaming of the first texture
 	return 1;
 }
@@ -147,6 +164,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	std::vector<size_t>NUNOOffsets;
 	std::vector<size_t>NUNVOffsets;
 	std::vector<size_t>NUNSOffsets;
+	std::vector<size_t>SOFTOffsets;
 
 	//Subsections data containers
 	std::vector<G1MM<bBigEndian>>G1MMs;
@@ -161,6 +179,8 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	std::vector<int> NUNVFileIDs;
 	std::vector<NUNS<bBigEndian>>NUNSs;
 	std::vector<int> NUNSFileIDs;
+	std::vector<SOFT<bBigEndian>>SOFTs;
+	std::vector<int> SOFTFileIDs;
 
 	//NUN maps
 	std::map<uint32_t, std::vector<uint32_t>> fileIndexToNUNO1Map;
@@ -335,6 +355,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 			case NUNS_MAGIC:
 				NUNSOffsets.push_back(chunkOffset);
 				NUNSFileIDs.push_back(fileID);
+				break;
+			case SOFT_MAGIC:
+				SOFTOffsets.push_back(chunkOffset);
+				SOFTFileIDs.push_back(fileID);
 				break;
 			default:
 				break;
@@ -539,7 +563,21 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		{
 			jointCount += nun1.controlPoints.size();
 		}
-	}	
+	}
+
+	//SOFT
+	for (auto i = 0; i < SOFTOffsets.size(); i++)
+	{
+		SOFTs.push_back(std::move(SOFT<bBigEndian>(fileBuffers[SOFTFileIDs[i]], SOFTOffsets[i])));
+	}
+
+	for (auto& soft : SOFTs)
+	{
+		for (auto& soft1 : soft.Soft1s)
+		{
+			jointCount += soft1.softNodes.size();
+		}
+	}
 
 	//Building merged skeleton, with no duplicates and all NUN bones
 	uint32_t jointIndex = 0;
@@ -848,7 +886,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		}
 
 		//NUNS Chunks
-		for (auto i = 0; i < NUNSFileIDs.size(); i++) //Keep a reference to the ID for the NUNMap
+		for (auto i = 0; i < NUNSFileIDs.size(); i++)
 		{
 
 			for (auto& nun1 : NUNSs[i].Nuns1s)
@@ -925,6 +963,45 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				driverMeshes.push_back(dMesh);
 			}
 		}
+
+		//SOFT Chunks
+		for (auto i = 0; i < SOFTFileIDs.size(); i++)		{
+
+			for (auto& soft1 : SOFTs[i].Soft1s)
+			{
+				uint32_t jointStart = jointIndex;
+				uint32_t softParentJointID;
+				if (soft1.parentID >> 31)
+					softParentJointID = globalToFinal[soft1.parentID ^ 0x80000000];
+				else
+					softParentJointID = globalToFinal[soft1.parentID];
+
+				//Process Nodes
+				for (auto j = 0; j < soft1.softNodes.size(); j++)
+				{
+					auto p = soft1.softNodes[j].pos;
+					auto parentID = soft1.parentID;
+
+					modelBone_t* joint = joints + jointIndex;
+					RichMat43 jointMatrix = soft1.softNodes[j].rot.ToMat43().m;
+					g_mfn->Math_VecCopy(p.v, jointMatrix.m.o);
+
+					joint->mat = jointMatrix.m;
+					snprintf(joint->name, 128, "soft1_p_%d_bone_%d", parentID, jointIndex);
+					joint->index = jointIndex;
+					joint->eData.parent = joints + parentID;
+					joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
+					joint->eData.mpDebug->mPointColor[0] = 1;
+					joint->eData.mpDebug->mPointColor[1] = 1;
+					joint->eData.mpDebug->mPointColor[2] = 0;
+
+					jointIndex++;
+				}
+
+			}
+		}
+
+
 	}
 	
 	if (bDisableNUNNodes)
@@ -1949,6 +2026,13 @@ bool NPAPI_InitLocal(void)
 	int fTHandleBE = g_nfn->NPAPI_Register((char*)"G1T File (Big Endian)", (char*) ".g1t");
 	if (fTHandleBE < 0)
 		return false;
+	//Texture handlers
+	int fTKHandle = g_nfn->NPAPI_Register((char*)"KHM File (Little Endian)", (char*)".khm");
+	if (fTKHandle < 0)
+		return false;
+	int fTKHandleBE = g_nfn->NPAPI_Register((char*)"KHM File (Big Endian)", (char*)".khm");
+	if (fTKHandleBE < 0)
+		return false;
 	//Map handlers
 	int fMHandle = g_nfn->NPAPI_Register((char*)"Map file (Little Endian)", (char*) ".objd");
 	if (fMHandle < 0)
@@ -1988,8 +2072,8 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getDisplayDriver(optHandle);
 
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Disable NUN nodes"), setDisableNUNNodes, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Only keep the base skeleton, ignoring the NUN nodes."));
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Disable physics nodes"), setDisableNUNNodes, nullptr);
+	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Only keep the base skeleton, ignoring the physics nodes."));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getDisableNUNNodes(optHandle);
 
@@ -2031,13 +2115,17 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetTypeHandler_LoadRGBA(fTHandle, LoadTexture<false>);
 	g_nfn->NPAPI_SetTypeHandler_TypeCheck(fTHandleBE, CheckTexture<true>);
 	g_nfn->NPAPI_SetTypeHandler_LoadRGBA(fTHandleBE, LoadTexture<true>);
+	g_nfn->NPAPI_SetTypeHandler_TypeCheck(fTKHandle, CheckHMTexture<false>);
+	g_nfn->NPAPI_SetTypeHandler_LoadRGBA(fTKHandle, LoadHMTexture<false>);
+	g_nfn->NPAPI_SetTypeHandler_TypeCheck(fTKHandleBE, CheckHMTexture<true>);
+	g_nfn->NPAPI_SetTypeHandler_LoadRGBA(fTKHandleBE, LoadHMTexture<true>);
 
 	//Maps
 	g_nfn->NPAPI_SetTypeHandler_TypeCheck(fMHandle, CheckMap<false>);
 	g_nfn->NPAPI_SetTypeHandler_LoadModel(fMHandle, LoadMap<false>);
 	
-	if (!g_nfn->NPAPI_DebugLogIsOpen())
-		g_nfn->NPAPI_PopupDebugLog(0);
+	/*if (!g_nfn->NPAPI_DebugLogIsOpen())
+		g_nfn->NPAPI_PopupDebugLog(0);*/
 	return true;
 }
 

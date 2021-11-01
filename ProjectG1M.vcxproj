@@ -40,8 +40,10 @@
     <ClInclude Include="Source\Public\G1M\NUNO.h" />
     <ClInclude Include="Source\Public\G1M\NUNS.h" />
     <ClInclude Include="Source\Public\G1M\NUNV.h" />
+    <ClInclude Include="Source\Public\G1M\SOFT.h" />
     <ClInclude Include="Source\Public\G1T.h" />
     <ClInclude Include="Source\Public\G2A.h" />
+    <ClInclude Include="Source\Public\KHM.h" />
     <ClInclude Include="Source\Public\OBJD.h" />
     <ClInclude Include="Source\Public\Oid.h" />
     <ClInclude Include="Source\Public\Options.h" />

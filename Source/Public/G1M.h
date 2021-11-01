@@ -10,6 +10,7 @@
 #include "G1M/NUNO.h"
 #include "G1M/NUNV.h"
 #include "G1M/NUNS.h"
+#include "G1M/SOFT.h"
 
 #define G1M_MAGIC   0x47314D5F
 #define G1MF_MAGIC  0x47314D46
