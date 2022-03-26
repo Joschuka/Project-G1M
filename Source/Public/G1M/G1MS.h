@@ -43,9 +43,9 @@ struct G1MS
 	std::map<uint16_t, uint16_t> globalIDToLocalID;
 	std::vector<G1MSJoint> joints;
 	std::vector<uint16_t> jointLocalIndexToExtract;
-	G1MS(BYTE* buffer, size_t startOffset)
+	G1MS(BYTE* buffer, uint32_t startOffset, bool& bIsG1MSUnordered)
 	{
-		size_t offset = startOffset;
+		uint32_t offset = startOffset;
 		GResourceHeader sectionHeader = reinterpret_cast<GResourceHeader<bBigEndian>*>(buffer + offset);
 		offset += 12;
 		//Read header
@@ -75,6 +75,7 @@ struct G1MS
 		else
 		{
 			offset = startOffset + header.jointInfoOffset;
+			bIsG1MSUnordered = true;
 			for (auto i = 0; i < header.jointCount; i++)
 			{
 				localIDToGlobalID[i] = i;

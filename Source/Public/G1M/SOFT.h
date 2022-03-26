@@ -86,11 +86,11 @@ template<bool bBigEndian>
 struct SOFT1
 {
 	uint32_t parentID;
-	size_t entrySize;
+	uint32_t entrySize;
 	std::vector<Soft1EntryNode<bBigEndian>> softNodes;
-	SOFT1(BYTE* buffer, size_t startOffset, uint32_t version)
+	SOFT1(BYTE* buffer, uint32_t startOffset, uint32_t version)
 	{
-		size_t offset = startOffset;
+		uint32_t offset = startOffset;
 		SoftNodeEntryHeader<bBigEndian> entryHeader = *reinterpret_cast<SoftNodeEntryHeader<bBigEndian>*>(buffer + offset);
 		offset += sizeof(SoftNodeEntryHeader<bBigEndian>) + sizeof(SoftNodeEntryUnk1);
 
@@ -121,9 +121,9 @@ template<bool bBigEndian>
 struct SOFT
 {
 	std::vector<SOFT1<bBigEndian>> Soft1s;
-	SOFT(BYTE* buffer, size_t startOffset)
+	SOFT(BYTE* buffer, uint32_t startOffset)
 	{
-		size_t offset = startOffset;
+		uint32_t offset = startOffset;
 		//Reading the header, we want the version
 		GResourceHeader<bBigEndian> header = reinterpret_cast<GResourceHeader<bBigEndian>*>(buffer + startOffset);
 		offset += sizeof(GResourceHeader<bBigEndian>);
@@ -138,7 +138,7 @@ struct SOFT
 		{
 			NunHeader<bBigEndian> subHeader = reinterpret_cast<NunHeader<bBigEndian>*>(buffer + offset); //Not a typo, exact same struct
 			offset += 12;
-			size_t checkpoint;
+			uint32_t checkpoint;
 			switch (subHeader.magic)
 			{
 			case SOFT1_MAGIC:

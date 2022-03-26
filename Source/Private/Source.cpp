@@ -18,6 +18,8 @@
 #include "../Public/G1A.h"
 #include "../Public/OBJD.h"
 
+#define MAX_CTRL_PTS 512 //Max number of control points, maximum value before being broken in subsets, as seen in both the NUNO sections and the vshader
+
 const char* g_pPluginName = "ProjectG1M";
 const char* g_pPluginDesc = "G1M Noesis plugin";
 
@@ -33,6 +35,9 @@ bool bNoTextureRename = false;
 char g1tConsolePath[MAX_NOESIS_PATH];
 bool bEnableNUNAutoRig = true;
 bool bLoadAllLODs = false;
+
+bool bIsNUNO5Global = false; //As of now I'm not sure how this chunk works when paired with other NUNO5 so I'm adding a quick and dirty option until I discover more.
+bool bNUNO5HasSubsets = false; //Temporary hack to prevent subsets from making anchored cloth to crash
 
 #include "../Public/Options.h"
 
@@ -158,13 +163,13 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	std::vector<void*> unpooledBufs;
 
 	//Offsets to the relevant G1M subSections
-	std::vector<size_t>G1MSOffsets;
-	std::vector<size_t>G1MMOffsets;
-	std::vector<size_t>G1MGOffsets;
-	std::vector<size_t>NUNOOffsets;
-	std::vector<size_t>NUNVOffsets;
-	std::vector<size_t>NUNSOffsets;
-	std::vector<size_t>SOFTOffsets;
+	std::vector<uint32_t>G1MSOffsets;
+	std::vector<uint32_t>G1MMOffsets;
+	std::vector<uint32_t>G1MGOffsets;
+	std::vector<uint32_t>NUNOOffsets;
+	std::vector<uint32_t>NUNVOffsets;
+	std::vector<uint32_t>NUNSOffsets;
+	std::vector<uint32_t>SOFTOffsets;
 
 	//Subsections data containers
 	std::vector<G1MM<bBigEndian>>G1MMs;
@@ -184,8 +189,9 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 	//NUN maps
 	std::map<uint32_t, std::vector<uint32_t>> fileIndexToNUNO1Map;
-	std::map<uint32_t, std::vector<uint32_t>> fileIndexToNUNO3Map;
+	std::map<uint32_t, std::vector<std::pair<uint32_t, int>>> fileIndexToNUNO3Map; //The second value is the subset index in the nunoSubsets array
 	std::map<uint32_t, std::vector<uint32_t>> fileIndexToNUNV1Map;
+	std::vector<std::array<uint32_t,512>> nunoSubsets; //MAX_CTRL_PTS is the max number of CPs in the shader for now, it may change eventually
 
 	//Maps containers
 	std::vector<RichVec3> mapPositions;
@@ -195,8 +201,9 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	//Meshes
 	std::vector<mesh_t> driverMeshes;
 
-	//Fixes
+	//Fixes and hacks
 	bool bIsSkeletonOrigin = true;
+	bool bIsG1MSUnordered = false; //On recent games the skeleton is laid out such as the parent is always read before the child. Not the case in very old G1M.
 	RichMat43 rootCoords;
 	
 	void* ctx = rapi->rpgCreateContext(); //Create context
@@ -325,7 +332,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 		//Going through all the sections and adding the chunks
 		bHasParsedG1MS = false;
-		size_t chunkOffset = g1mHeader.firstChunkOffset;
+		uint32_t chunkOffset = g1mHeader.firstChunkOffset;
 		for (auto i = 0; i < g1mHeader.chunkCount; i++)
 		{
 			GResourceHeader<bBigEndian> header = reinterpret_cast<GResourceHeader<bBigEndian>*>(fb + chunkOffset);
@@ -372,13 +379,12 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	std::vector<bool> isOffsetInternal;
 	for (auto i = 0; i< G1MSOffsets.size(); i++)
 	{
-		G1MS<bBigEndian> temp = G1MS<bBigEndian>(fileBuffers[i], G1MSOffsets[i]);
+		G1MS<bBigEndian> temp = G1MS<bBigEndian>(fileBuffers[i], G1MSOffsets[i], bIsG1MSUnordered);
 		if (temp.bIsInternal)
 		{
 			internalSkeletons.push_back(std::move(temp));
 			isOffsetInternal.push_back(true);
 		}
-
 		else
 		{
 			externalSkeletons.push_back(std::move(temp));
@@ -607,7 +613,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				}
 				else
 				{
-					joint->eData.parent = joints + globalToFinal[s.localIDToGlobalID[parent]];
+					if(bIsG1MSUnordered)
+						joint->eData.parent = joints + s.localIDToGlobalID[parent]; //avoid missing a global to final index, global indices don't exist anyways in these old g1m so it's equivalent to identity
+					else
+						joint->eData.parent = joints + globalToFinal[s.localIDToGlobalID[parent]];
 				}
 				snprintf(joint->name, 128, "bone_%d", s.localIDToGlobalID[idx]);
 				joint->mat = s.joints[idx].rotation.ToMat43().GetInverse().m;
@@ -631,11 +640,18 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				uint32_t parent = s.joints[idx].parent;
 				if (parent >> 31) //0x80000000 flag
 				{
-					joint->eData.parent = joints + globalToFinal[internalSkeletons[0].localIDToGlobalID[parent]];
+					if(bIsG1MSUnordered)
+						joint->eData.parent = joints + internalSkeletons[0].localIDToGlobalID[parent];
+					else
+						joint->eData.parent = joints + globalToFinal[internalSkeletons[0].localIDToGlobalID[parent]];
+					
 				}
 				else
 				{
-					joint->eData.parent = joints + globalToFinal[s.localIDToGlobalID[parent]];
+					if (bIsG1MSUnordered)
+						joint->eData.parent = joints + s.localIDToGlobalID[parent];
+					else
+						joint->eData.parent = joints + globalToFinal[s.localIDToGlobalID[parent]];
 				}
 				snprintf(joint->name, 128, "physbone_%d", s.localIDToGlobalID[idx]);
 				joint->mat = s.joints[idx].rotation.ToMat43().GetInverse().m;
@@ -731,13 +747,29 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 			for (auto& nun3 : NUNOs[i].Nuno3s)
 			{
+
+				if (nun3.parentSetID>=0)
+				{
+					bNUNO5HasSubsets = true;
+					int jointStart = fileIndexToNUNO3Map[NUNOFileIDs[i]][nun3.parentSetID].first;
+					fileIndexToNUNO3Map[NUNOFileIDs[i]].push_back(std::make_pair(jointStart,nunoSubsets.size()));
+					std::array<uint32_t, MAX_CTRL_PTS> subset = std::array<uint32_t, MAX_CTRL_PTS>();
+					subset.fill(0);
+					for (auto j = 0; j < nun3.controlPoints.size(); j++)
+					{
+						subset[j] = nun3.influences[j].P1;
+					}
+					nunoSubsets.push_back(subset);
+					continue;
+				}
+
 				uint32_t jointStart = jointIndex;
 				uint32_t nunParentJointID;
 				if (nun3.parentID >> 31)
 					nunParentJointID = globalToFinal[nun3.parentID ^ 0x80000000];
 				else
 					nunParentJointID = globalToFinal[nun3.parentID];
-				fileIndexToNUNO3Map[NUNOFileIDs[i]].push_back(jointStart);
+				fileIndexToNUNO3Map[NUNOFileIDs[i]].push_back(std::make_pair(jointStart, -1));
 
 				//Prepare driverMeshes
 				mesh_t dMesh;
@@ -768,12 +800,19 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 						RichMat43 mat1 = RichMat43(joints[nunParentJointID].mat);
 						RichMat43 mat2 = RichMat43(joints[parentID].mat);
 						jointMatrix = mat1 * mat2.GetInverse();
+						if (bIsNUNO5Global && link.P5 == 0)
+							jointMatrix = mat1;
 						p = jointMatrix.TransformPoint(p);
 						g_mfn->Math_VecCopy(p.v, jointMatrix.m.o);
 					}
 					RichMat43 mat3 = RichMat43(joints[parentID].mat);
 					joint->mat = (jointMatrix * mat3).m;
-					snprintf(joint->name, 128, "nuno3_p_%d_bone_%d", nunParentJointID,jointIndex);
+					if(bIsNUNO5Global && link.P5 == 0)//Model space coords if P5 is null, see 79d40f50					
+						joint->mat = jointMatrix.m;
+					if(!bIsNUNO5Global)
+						snprintf(joint->name, 128, "nuno3_p_%d_bone_%d", nunParentJointID,jointIndex);
+					else
+						snprintf(joint->name, 128, "nuno5_p_%d_bone_%d", nunParentJointID, jointIndex);
 					joint->index = jointIndex;
 					joint->eData.parent = joints + parentID;
 					joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
@@ -800,7 +839,6 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 				//Driver mesh indices
 				createDriverIndexBuffers(dMesh, polys, unpooledBufs, rapi);
-
 				driverMeshes.push_back(dMesh);
 			}
 		}
@@ -1088,6 +1126,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		std::map<uint32_t,uint32_t> lodMap;
 		std::map<uint32_t,bool> bIsPhysType1; //NUN meshes. We could replace maps by vectors but we're not sure if indices are always ordered
 		std::map<uint32_t,bool> bIsPhysType2; //"Danglies" (hair strands etc)
+		std::map<uint32_t, int> nunSubsetIndex; //NUN meshes using subsets of parent NUN.
 		std::map<uint32_t, int32_t> nunMapJointIndex;
 		
 		if (bLoadAllLODs)
@@ -1111,7 +1150,11 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 								else if (mesh.externalID >= 10000 && mesh.externalID < 20000)
 									nunMapJointIndex[index] = fileIndexToNUNV1Map[i][mesh.externalID % 10000];
 								else if (mesh.externalID >= 20000 && mesh.externalID < 30000)
-									nunMapJointIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000];
+								{
+									nunMapJointIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000].first;
+									if (fileIndexToNUNO3Map[i][mesh.externalID % 10000].second >= 0)
+										nunSubsetIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000].second;
+								}
 							}
 						}
 					}
@@ -1134,7 +1177,11 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 						else if (mesh.externalID >= 10000 && mesh.externalID < 20000)
 							nunMapJointIndex[index] = fileIndexToNUNV1Map[i][mesh.externalID % 10000];
 						else if (mesh.externalID >= 20000 && mesh.externalID < 30000)
-							nunMapJointIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000];
+						{
+							nunMapJointIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000].first;
+							if (fileIndexToNUNO3Map[i][mesh.externalID % 10000].second >= 0)
+								nunSubsetIndex[index] = fileIndexToNUNO3Map[i][mesh.externalID % 10000].second;
+						}
 					}
 				}
 			}
@@ -1377,7 +1424,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 						jointIdB2 = vbuf.bufferAdress + attribute.offset;
 						jointIdB2Type = attribute.dataType;
 					}
-					if (bIsPhysType1[smIdx])
+					if (bIsPhysType1[smIdx] && (attribute.layer == 0)) //For some reason some cloth meshes have a second joint weight set too, only take the first one.
 					{
 						controlPointRelativeIndices1 = vbuf.bufferAdress + attribute.offset;
 						cPIdx1Type = attribute.dataType;
@@ -1396,7 +1443,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 						jointWB2 = vbuf.bufferAdress + attribute.offset;
 						jointWB2Type = attribute.dataType;
 					}
-					if (bIsPhysType1[smIdx])
+					if (bIsPhysType1[smIdx] && (attribute.layer == 0)) //For some reason some cloth meshes have a second joint weight set too, only take the first one.
 						centerOfMassWeightsSet1 = vbuf.bufferAdress + attribute.offset;
 					break;
 
@@ -1512,7 +1559,22 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 			//Transforming vertices for Cloth Type 1
 			if (bIsPhysType1[smIdx] && joints)
 			{
-				modelBone_t* CPSet = joints + nunMapJointIndex[smIdx];
+				modelBone_t* CPSet = nullptr;
+				if (nunSubsetIndex.count(smIdx) > 0) //If this physics mesh is associated to a subset, use the CPs from the parent entry
+				{
+					modelBone_t tempSet[MAX_CTRL_PTS];
+					for (auto ctrl = 0; ctrl < MAX_CTRL_PTS; ctrl++)
+					{
+						tempSet[ctrl] = *(joints +nunMapJointIndex[smIdx] + nunoSubsets[nunSubsetIndex[smIdx]][ctrl]);
+					}
+					CPSet = tempSet;
+				}
+				else
+				{
+					CPSet = joints + nunMapJointIndex[smIdx];
+				}
+
+
 				float* posB = (float*)(controlPointsWeightsSet1);
 				RichVec3 u1, u2, u3, u4, v1, v2, v3, v4;
 				RichVec4 centerOfMassWVec1, centerOfMassWVec2, controlPCMWVec1, controlPCMWVec2;
@@ -1548,7 +1610,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 					switch (cPIdx1Type)
 					{
-					case VADataType_UByte_x4:
+					case EG1MGVADatatype::VADataType_UByte_x4:
 					{
 						uint8_t* indexPointer = (uint8_t*)controlPointRelativeIndices1;
 						u1 = RichMat43(CPSet[indexPointer[index]].mat.o, CPSet[indexPointer[index + 1]].mat.o,
@@ -1557,9 +1619,15 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 							CPSet[indexPointer[index + 2]].mat.o, CPSet[indexPointer[index + 3]].mat.o).GetTranspose().TransformVec4(controlPCMWVec2).ToVec3();
 						break;
 					}
-					case VADataType_UShort_x4:
+					case EG1MGVADatatype::VADataType_UShort_x4:
 					{
 						uint16_t* indexPointer = (uint16_t*)(controlPointRelativeIndices1+index);
+						//Check if there's a -1 (i.e. unused weight)
+						for (auto w = 0; w < 4; w++)
+						{
+							if (indexPointer[w] == 65535)
+								indexPointer[w] = 0;//Just put whatever that won't cause a crash
+						}
 						u1 = RichMat43(CPSet[indexPointer[0]].mat.o, CPSet[indexPointer[1]].mat.o,
 							CPSet[indexPointer[2]].mat.o, CPSet[indexPointer[3]].mat.o).GetTranspose().TransformVec4(controlPCMWVec1).ToVec3();
 						v1 = RichMat43(CPSet[indexPointer[0]].mat.o, CPSet[indexPointer[1]].mat.o,
@@ -1572,7 +1640,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 					switch (cPIdx2Type)
 					{
-					case VADataType_UByte_x4:
+					case EG1MGVADatatype::VADataType_UByte_x4:
 					{
 						uint8_t* indexPointer = (uint8_t*)controlPointRelativeIndices2;
 						u2 = RichMat43(CPSet[indexPointer[index]].mat.o, CPSet[indexPointer[index + 1]].mat.o,
@@ -1581,9 +1649,14 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 							CPSet[indexPointer[index + 2]].mat.o, CPSet[indexPointer[index + 3]].mat.o).GetTranspose().TransformVec4(controlPCMWVec2).ToVec3();
 						break;
 					}
-					case VADataType_UShort_x4:
+					case EG1MGVADatatype::VADataType_UShort_x4:
 					{
 						uint16_t* indexPointer = (uint16_t*)(controlPointRelativeIndices2+index);
+						for (auto w = 0; w < 4; w++)
+						{
+							if (indexPointer[w] == 65535)
+								indexPointer[w] = 0;//Just put whatever that won't cause a crash
+						}
 						u2 = RichMat43(CPSet[indexPointer[0]].mat.o, CPSet[indexPointer[1]].mat.o,
 							CPSet[indexPointer[2]].mat.o, CPSet[indexPointer[3]].mat.o).GetTranspose().TransformVec4(controlPCMWVec1).ToVec3();
 						v2 = RichMat43(CPSet[indexPointer[0]].mat.o, CPSet[indexPointer[1]].mat.o,
@@ -1596,7 +1669,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 					switch (cPIdx3Type)
 					{
-					case VADataType_UByte_x4:
+					case EG1MGVADatatype::VADataType_UByte_x4:
 					{
 						uint8_t* indexPointer = (uint8_t*)controlPointRelativeIndices3;
 						u3 = RichMat43(CPSet[indexPointer[index]].mat.o, CPSet[indexPointer[index + 1]].mat.o,
@@ -1605,9 +1678,14 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 							CPSet[indexPointer[index + 2]].mat.o, CPSet[indexPointer[index + 3]].mat.o).GetTranspose().TransformVec4(controlPCMWVec2).ToVec3();
 						break;
 					}
-					case VADataType_UShort_x4:
+					case EG1MGVADatatype::VADataType_UShort_x4:
 					{
 						uint16_t* indexPointer = (uint16_t*)(controlPointRelativeIndices3+index);
+						for (auto w = 0; w < 4; w++)
+						{
+							if (indexPointer[w] == 65535)
+								indexPointer[w] = 0;//Just put whatever that won't cause a crash
+						}
 						u3 = RichMat43(CPSet[indexPointer[0]].mat.o, CPSet[indexPointer[1]].mat.o,
 							CPSet[indexPointer[2]].mat.o, CPSet[indexPointer[3]].mat.o).GetTranspose().TransformVec4(controlPCMWVec1).ToVec3();
 						v3 = RichMat43(CPSet[indexPointer[0]].mat.o, CPSet[indexPointer[1]].mat.o,
@@ -1620,7 +1698,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 
 					switch (cPIdx4Type)
 					{
-					case VADataType_UByte_x4:
+					case EG1MGVADatatype::VADataType_UByte_x4:
 					{
 						uint8_t* indexPointer = (uint8_t*)controlPointRelativeIndices4;
 						u4 = RichMat43(CPSet[indexPointer[index]].mat.o, CPSet[indexPointer[index + 1]].mat.o,
@@ -1629,9 +1707,14 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 							CPSet[indexPointer[index + 2]].mat.o, CPSet[indexPointer[index + 3]].mat.o).GetTranspose().TransformVec4(controlPCMWVec2).ToVec3();
 						break;
 					}
-					case VADataType_UShort_x4:
+					case EG1MGVADatatype::VADataType_UShort_x4:
 					{
 						uint16_t* indexPointer = (uint16_t*)(controlPointRelativeIndices4+index);
+						for (auto w = 0; w < 4; w++)
+						{
+							if (indexPointer[w] == 65535)
+								indexPointer[w] = 0;//Just put whatever that won't cause a crash
+						}
 						u4 = RichMat43(CPSet[indexPointer[0]].mat.o, CPSet[indexPointer[1]].mat.o,
 							CPSet[indexPointer[2]].mat.o, CPSet[indexPointer[3]].mat.o).GetTranspose().TransformVec4(controlPCMWVec1).ToVec3();
 						v4 = RichMat43(CPSet[indexPointer[0]].mat.o, CPSet[indexPointer[1]].mat.o,
@@ -1656,22 +1739,23 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					}
 					if (c.Length() == 0) //Should probably check it at the start of the for loop for better performance. Oh well
 					{
-						transformPosF<bBigEndian>(controlPointsWeightsSet1 + index, 1, phys1Stride, &CPSet->eData.parent->mat);
+						transformPosF<bBigEndian>(controlPointsWeightsSet1 + index, 1, phys1Stride, &(joints + nunMapJointIndex[smIdx])->eData.parent->mat);
 						bHasSkinnedParts = true;
 						for (auto k = 0; k < 4; k++)
 						{
 							dstW[4 * j + k] = centerOfMassWVec1[k];
-							if (cPIdx1Type == VADataType_UByte_x4)
+							if (cPIdx1Type == EG1MGVADatatype::VADataType_UByte_x4)
 								dstIB[4 * j + k] = *(uint8_t*)(controlPointRelativeIndices1 + index + k);
-							else if (cPIdx1Type == VADataType_UShort_x4)
+							else if (cPIdx1Type == EG1MGVADatatype::VADataType_UShort_x4)
 								dstIS[4*j +k] = *(uint16_t*)(controlPointRelativeIndices1 + index + k);
 						}
 					}
 					else
 					{
 						RichVec3 d = b.Cross(c);
+						if (bIsNUNO5Global)
+							d = d.Normalized();
 						c = d * depth + a;
-						d = c.Normalized();
 						if (bBigEndian)
 						{
 							c.ChangeEndian();
@@ -1683,17 +1767,19 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				}
 				rapi->rpgBindPositionBuffer(controlPointsWeightsSet1, RPGEODATA_FLOAT, phys1Stride);
 				rapi->rpgBindNormalBuffer(nullptr, RPGEODATA_FLOAT, phys1Stride);
-				if (bHasSkinnedParts)
+				if (bHasSkinnedParts && !bNUNO5HasSubsets) //temporary hack to disable anchored cloth for now when NUNO5 has subsets, treat it like the others
 				{
-					rapi->rpgBindBoneIndexBuffer(jointIBFinal, cPIdx1Type == VADataType_UByte_x4 ? RPGEODATA_UBYTE : RPGEODATA_USHORT, cPIdx1Type == VADataType_UByte_x4 ? 4 : 8, 4);
+					rapi->rpgBindBoneIndexBuffer(jointIBFinal, cPIdx1Type == EG1MGVADatatype::VADataType_UByte_x4 ? RPGEODATA_UBYTE : RPGEODATA_USHORT, cPIdx1Type == EG1MGVADatatype::VADataType_UByte_x4 ? 4 : 8, 4);
 					rapi->rpgBindBoneWeightBuffer(jointWBFinal, RPGEODATA_FLOAT, 16, 4);
 				}
 			}
 
 			//Transforming vertices for Cloth type 2
 			if (bIsPhysType2[smIdx] && jStride>0 && joints)
-			{				
-				for (auto j = 0; j < submesh.vertexCount; j++)
+			{	
+				auto attribute = g1mg.vertexAttributeSets[submesh.vertexBufferIndex].attributes[0];
+				int vCount = g1mg.vertexBuffers[attribute.bufferID].count;
+				for (auto j = 0; j < vCount; j++)
 				{
 					uint32_t bPID;
 					//Read the jointIndex that will give us the jointPalette entry with all its info
@@ -1713,7 +1799,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					}
 					
 					bPID /= 3;
-					uint32_t jID = g1mg.jointPalettes[submesh.bonePaletteIndex].entries[bPID].physicsIndex;;
+					uint32_t jID = g1mg.jointPalettes[submesh.bonePaletteIndex].entries[bPID].physicsIndex &0x7FFFFFFF;
 					modelMatrix_t matrix = joints[jID].mat;
 					//Here we assume that the first internal skel has the physics joint's parent (which is always the case on all the samples)
 					transformPosF<bBigEndian>(posB + j*jStride, 1, jStride, &joints[jID].mat);
@@ -1732,13 +1818,13 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				//Indices
 				switch (jointIdBType)
 				{
-				case VADataType_UByte_x4:
+				case EG1MGVADatatype::VADataType_UByte_x4:
 					rapi->rpgBindBoneIndexBuffer(jointIdB, RPGEODATA_UBYTE, jStride, jidCount);
 					break;
-				case VADataType_UShort_x4:
+				case EG1MGVADatatype::VADataType_UShort_x4:
 					rapi->rpgBindBoneIndexBuffer(jointIdB, RPGEODATA_USHORT, jStride, jidCount);
 					break;
-				case VADataType_UInt_x4:
+				case EG1MGVADatatype::VADataType_UInt_x4:
 					rapi->rpgBindBoneIndexBuffer(jointIdB, RPGEODATA_UINT, jStride, jidCount);
 					break;
 				default:
@@ -1750,14 +1836,14 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				//See if we can inject the weights directly
 				switch (jointWBType)
 				{
-				case VADataType_Float_x4:
+				case EG1MGVADatatype::VADataType_Float_x4:
 					switch (jointWB2Type)
 					{
-					case VADataType_Float_x4:
+					case EG1MGVADatatype::VADataType_Float_x4:
 						rapi->rpgBindBoneWeightBuffer(jointWB, RPGEODATA_FLOAT, jStride, jidCount);
 						bHasWBeenSet = true;
 						break;
-					case VADataType_Dummy:
+					case EG1MGVADatatype::VADataType_Dummy:
 						if (!jointIdB2) //necessary to avoid edge case mentionned above
 						{
 							rapi->rpgBindBoneWeightBuffer(jointWB, RPGEODATA_FLOAT, jStride, jidCount);
@@ -1769,14 +1855,14 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					}
 					break;
 
-				case VADataType_HalfFloat_x4:
+				case EG1MGVADatatype::VADataType_HalfFloat_x4:
 					switch (jointWB2Type)
 					{
-					case VADataType_HalfFloat_x4:
+					case EG1MGVADatatype::VADataType_HalfFloat_x4:
 						rapi->rpgBindBoneWeightBuffer(jointWB, RPGEODATA_HALFFLOAT, jStride, jidCount);
 						bHasWBeenSet = true;
 						break;
-					case VADataType_Dummy:
+					case EG1MGVADatatype::VADataType_Dummy:
 						if (!jointIdB2) //necessary to avoid edge case mentionned above
 						{
 							rapi->rpgBindBoneWeightBuffer(jointWB, RPGEODATA_HALFFLOAT, jStride, jidCount);
@@ -1788,14 +1874,14 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					}
 					break;
 
-				case VADataType_NormUByte_x4:
+				case EG1MGVADatatype::VADataType_NormUByte_x4:
 					switch (jointWB2Type)
 					{
-					case VADataType_NormUByte_x4:
+					case EG1MGVADatatype::VADataType_NormUByte_x4:
 						rapi->rpgBindBoneWeightBuffer(jointWB, RPGEODATA_UBYTE, jStride, jidCount);
 						bHasWBeenSet = true;
 						break;
-					case VADataType_Dummy:
+					case EG1MGVADatatype::VADataType_Dummy:
 						if (!jointIdB2) //necessary to avoid edge case mentionned above
 						{
 							rapi->rpgBindBoneWeightBuffer(jointWB, RPGEODATA_UBYTE, jStride, jidCount);
@@ -1819,10 +1905,11 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				}
 			}
 
-			//Skinning for submesh type 55
-			if (submesh.submeshType == 55)
+			//Skinning for rigid submeshes
+			if (submesh.submeshType & 0x2) //See 79d40f50.g1m from SoP for 63
 			{
-				int size = submesh.vertexCount;
+				auto attribute = g1mg.vertexAttributeSets[submesh.vertexBufferIndex].attributes[0];
+				int size = g1mg.vertexBuffers[attribute.bufferID].count;
 				BYTE* jointIBFinal = (BYTE*)rapi->Noesis_PooledAlloc(sizeof(char) * size);
 				memset(jointIBFinal, 0, size);
 				rapi->rpgBindBoneIndexBuffer(jointIBFinal, RPGEODATA_UBYTE, 1, 1);

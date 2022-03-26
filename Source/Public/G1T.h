@@ -3,7 +3,7 @@
 #ifndef G1T_H
 #define G1T_H
 
-enum EG1TPlatform : uint32_t
+enum class EG1TPlatform : uint32_t
 {
 	PS2 = 0x0,
 	PS3 = 0x1,
@@ -17,7 +17,8 @@ enum EG1TPlatform : uint32_t
 	NWiiU = 0x9,
 	Windows = 0xA,
 	PS4 = 0xB,
-	XOne = 0xC
+	XOne = 0xC,
+	NSwitch = 0x10,
 };
 
 template <bool bBigEndian>
@@ -134,8 +135,9 @@ struct G1T
 			bool bSpecialCaseETC = false;
 			bool b3DSAlpha = false;
 			bool bETCAlpha = false;
+			bool bNeedsX360EndianSwap = false;
 			std::string rawFormat ="";
-			int fourccFormat = -1;
+			int fourccFormat = -1;			
 
 			int32_t computedSize = -1;
 			uint32_t mortonWidth = 0;
@@ -166,6 +168,7 @@ struct G1T
 				break;
 			case 0x6:
 				fourccFormat = FOURCC_DXT1;
+				bNeedsX360EndianSwap = true;
 				break;
 			case 0x7:
 				fourccFormat = FOURCC_DXT3;
@@ -310,13 +313,15 @@ struct G1T
 					dataSize = bufferLen - offsetList[i] - texHeader.headerSize - header.tableOffset;
 			}
 
-			//Swap endian for x360 textures
 			if (header.platform == EG1TPlatform::X360)
 			{
-				uint16_t* tmp = (uint16_t*)(buffer + offset);
-				for (auto i = 0; i < dataSize / 2; i++)
-				{
-					LITTLE_BIG_SWAP(tmp[i]);
+				if (bNeedsX360EndianSwap || mortonWidth > 0)
+				{	//Swap endian for x360 textures
+					uint16_t* tmp = (uint16_t*)(buffer + offset);
+					for (auto i = 0; i < dataSize / 2; i++)
+					{
+						LITTLE_BIG_SWAP(tmp[i]);
+					}
 				}
 			}
 
@@ -325,6 +330,15 @@ struct G1T
 			{
 				switch (header.platform)
 				{
+				case EG1TPlatform::X360:
+				{					
+					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+					if (bRaw)
+						rapi->Noesis_UntileImageRAW(untiledTexData, buffer + offset, dataSize, width, height, mortonWidth);
+					else
+						rapi->Noesis_UntileImageDXT(untiledTexData, buffer + offset, dataSize, width, height, mortonWidth * 2);
+					break;
+				}
 				case EG1TPlatform::PS4:
 					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
 					if (bRaw)
@@ -335,6 +349,20 @@ struct G1T
 				case EG1TPlatform::NWiiU:
 					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
 					break;
+				case EG1TPlatform::NSwitch:
+				{
+					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize*4);
+					int blockWidth = 4;
+					int blockHeight = (height <= 256) ? 3 : 4;
+					blockHeight = (height <= 128) ? 2 : blockHeight;
+					blockHeight = (height <= 64) ? 1 : blockHeight;
+					int widthInBlocks = (width + (blockWidth - 1)) / blockWidth;
+					int temp = (height + (blockHeight - 1));
+					int	heightInBlocks = (height + (blockHeight - 1)) / blockHeight;
+					int maxBlockHeight = rapi->Image_TileCalculateBlockLinearGOBBlockHeight(height, blockHeight);
+					rapi->Image_UntileBlockLinearGOBs(untiledTexData, dataSize, buffer + offset, dataSize, widthInBlocks, heightInBlocks, maxBlockHeight, mortonWidth*2);
+					break;
+				}
 				default:
 					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
 					if (bRaw)

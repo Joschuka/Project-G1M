@@ -11,9 +11,11 @@ struct G1AHeader
 	uint32_t dataSectionOffset;	
 	uint16_t boneInfoCount;
 	uint16_t boneMaxID;
+	uint32_t chunkVersion;
 	G1AHeader(BYTE* buffer, int bufferLen, uint32_t& offset)
 	{
 		GResourceHeader<bBigEndian> sectionHeader = reinterpret_cast<GResourceHeader<bBigEndian>*>(buffer);
+		chunkVersion = sectionHeader.chunkVersion;
 		offset += sizeof(GResourceHeader<bBigEndian>);	
 		animationType = *(uint16_t*)(buffer + offset);
 		offset += 4; //skip unknown
@@ -126,26 +128,55 @@ struct G1A
 					LITTLE_BIG_SWAP(dataOffset);
 				}
 				offset = checkpoint2 + dataOffset * 0x10;
-				for (auto k = 0; k < keyFrameCount; k++)
-				{
-					std::array<float, 4> temp;
-					memcpy(temp.data(), buffer + offset, 16);
-					if (bBigEndian)
+
+				if (header.chunkVersion > 0x30303430)
+				{	//components before timing
+					for (auto k = 0; k < keyFrameCount; k++)
 					{
-						for (auto& e : temp)
-							LITTLE_BIG_SWAP(e);
+						std::array<float, 4> temp;
+						memcpy(temp.data(), buffer + offset, 16);
+						if (bBigEndian)
+						{
+							for (auto& e : temp)
+								LITTLE_BIG_SWAP(e);
+						}
+						data.push_back(std::move(temp));
+						offset += 16;
 					}
-					data.push_back(std::move(temp));
-					offset += 16;
+					for (auto k = 0; k < keyFrameCount; k++)
+					{
+						float temp = *(float*)(buffer + offset);
+						if (bBigEndian)
+							LITTLE_BIG_SWAP(temp);
+						times.push_back(temp);
+						offset += 4;
+					}
 				}
-				for (auto k = 0; k < keyFrameCount; k++)
+				else
 				{
-					float temp = *(float*)(buffer + offset);
-					if (bBigEndian)
-						LITTLE_BIG_SWAP(temp);
-					times.push_back(temp);
-					offset += 4;
+					//timing before components
+					for (auto k = 0; k < keyFrameCount; k++)
+					{
+						float temp = *(float*)(buffer + offset);
+						if (bBigEndian)
+							LITTLE_BIG_SWAP(temp);
+						times.push_back(temp);
+						offset += 4;
+					}
+					for (auto k = 0; k < keyFrameCount; k++)
+					{
+						std::array<float, 4> temp;
+						memcpy(temp.data(), buffer + offset, 16);
+						if (bBigEndian)
+						{
+							for (auto& e : temp)
+								LITTLE_BIG_SWAP(e);
+						}
+						data.push_back(std::move(temp));
+						offset += 16;
+					}
 				}
+				
 				chanValues.push_back(std::move(data));
 				chanTimes.push_back(std::move(times));
 			}

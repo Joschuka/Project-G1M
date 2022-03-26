@@ -81,15 +81,15 @@ struct G1MG
 	std::vector<G1MGSubmesh<bBigEndian>> submeshes;
 	std::vector<G1MGMeshGroup<bBigEndian>> meshGroups;
 
-	G1MG(BYTE* buffer, size_t startOffset, G1MS<bBigEndian>* internalSkel, G1MS<bBigEndian>* externalSkel, std::map<uint32_t, uint32_t>* globalToFinal)
+	G1MG(BYTE* buffer, uint32_t startOffset, G1MS<bBigEndian>* internalSkel, G1MS<bBigEndian>* externalSkel, std::map<uint32_t, uint32_t>* globalToFinal)
 	{
-		size_t offset = startOffset;
+		uint32_t offset = startOffset;
 		//Read headers
 		GResourceHeader sectionHeader = reinterpret_cast<GResourceHeader<bBigEndian>*>(buffer + offset);
 		offset = startOffset + 12;
 		G1MGHeader<bBigEndian> g1mgHeader = reinterpret_cast<G1MGHeader<bBigEndian>*>(buffer + offset);
 		offset += sizeof(G1MGHeader<bBigEndian>);
-		size_t checkpoint = offset;
+		uint32_t checkpoint = offset;
 		for (auto i = 0; i < g1mgHeader.sectionCount; i++)
 		{
 			offset = checkpoint;

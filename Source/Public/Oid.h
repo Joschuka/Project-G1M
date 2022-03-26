@@ -31,7 +31,7 @@ struct OID
 			std::string s = std::string(reinterpret_cast<const char*>(buffer), bufferLen);
 
 			std::string delimiter = "\r\n";
-			size_t pos = 0;
+			uint32_t pos = 0;
 			std::string token;
 			while ((pos = s.find(delimiter)) != std::string::npos) {
 				token = s.substr(0, pos);
@@ -74,7 +74,7 @@ struct OID
 		if (bHasIDs)
 		{
 			std::string delimiter = ",";
-			size_t pos = 0;
+			uint32_t pos = 0;
 			uint32_t id;
 			for (std::string& name : nameList)
 			{

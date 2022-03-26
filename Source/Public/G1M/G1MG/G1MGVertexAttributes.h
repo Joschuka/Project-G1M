@@ -2,7 +2,7 @@
 #ifndef G1M_G_VA
 #define G1M_G_VA
 
-enum EG1MGVADatatype : uint8_t
+enum class EG1MGVADatatype : uint8_t
 {
 	VADataType_Float_x1 = 0x00,
 	VADataType_Float_x2 = 0x01,
@@ -17,7 +17,7 @@ enum EG1MGVADatatype : uint8_t
 	VADataType_Dummy = 0xFF
 };
 
-enum EG1MGVASemantic : uint8_t
+enum class EG1MGVASemantic : uint8_t
 {
 	Position = 0x00,
 	JointWeight,

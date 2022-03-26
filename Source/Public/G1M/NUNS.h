@@ -22,14 +22,14 @@ template<bool bBigEndian>
 struct NUNS1
 {
 	uint32_t parentID;
-	size_t entrySize;
+	uint32_t entrySize;
 	std::vector<RichVec4> controlPoints;
 	std::vector<NunsInfluence> influences;
-	NUNS1(BYTE* buffer, size_t startOffset, uint32_t version)
+	NUNS1(BYTE* buffer, uint32_t startOffset, uint32_t version)
 	{
-		size_t offset = startOffset;
+		uint32_t offset = startOffset;
 		parentID = *reinterpret_cast<uint32_t*>(buffer + offset);
-		size_t controlPointCount = *reinterpret_cast<uint32_t*>(buffer + offset + 4);
+		uint32_t controlPointCount = *reinterpret_cast<uint32_t*>(buffer + offset + 4);
 
 		if (bBigEndian)
 		{
@@ -76,7 +76,7 @@ struct NUNS1
 			offset += 4;
 		}
 		offset += 4;
-		size_t blwoSize = *reinterpret_cast<uint32_t*>(buffer + offset);
+		uint32_t blwoSize = *reinterpret_cast<uint32_t*>(buffer + offset);
 		offset += 16 + blwoSize;
 		entrySize = offset - startOffset;
 	}
@@ -86,9 +86,9 @@ template<bool bBigEndian>
 struct NUNS
 {
 	std::vector<NUNS1<bBigEndian>> Nuns1s;
-	NUNS(BYTE* buffer, size_t startOffset)
+	NUNS(BYTE* buffer, uint32_t startOffset)
 	{
-		size_t offset = startOffset;
+		uint32_t offset = startOffset;
 		//Reading the header, we want the version
 		GResourceHeader<bBigEndian> header = reinterpret_cast<GResourceHeader<bBigEndian>*>(buffer + startOffset);
 		offset += sizeof(GResourceHeader<bBigEndian>);
@@ -103,7 +103,7 @@ struct NUNS
 		{
 			NunHeader<bBigEndian> subHeader = reinterpret_cast<NunHeader<bBigEndian>*>(buffer + offset);
 			offset += 12;
-			size_t checkpoint;
+			uint32_t checkpoint;
 			switch (subHeader.magic)
 			{
 			case NUNS1_MAGIC:

@@ -88,7 +88,7 @@ void DirtyAlign(BYTE* buffer, uint32_t& offset)
 template<bool bBigEndian>
 bool UnpackBundles(BYTE* buffer, int bufferLen, std::map<uint32_t, std::vector<BYTE*>>& bundleIDtoG1mOffsets, std::map<uint32_t, std::vector<uint32_t>>& bundleIDtoG1mSizes)
 {
-	size_t offset = 0;
+	uint32_t offset = 0;
 	bool bSuccess = true;
 
 	//Check entry count first, should be 2 in most cases
