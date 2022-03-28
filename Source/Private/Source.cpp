@@ -205,6 +205,12 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	bool bIsSkeletonOrigin = true;
 	bool bIsG1MSUnordered = false; //On recent games the skeleton is laid out such as the parent is always read before the child. Not the case in very old G1M.
 	RichMat43 rootCoords;
+
+	//Before doing anything, make sure that Noesis is up to date
+	if (g_nfn->NPAPI_GetAPIVersion() < NOESIS_PLUGINAPI_VERSION) {
+		g_nfn->NPAPI_MessagePrompt(L"Please update Noesis!");
+		return nullptr;
+	}
 	
 	void* ctx = rapi->rpgCreateContext(); //Create context
 	int g1mCount = 0;
