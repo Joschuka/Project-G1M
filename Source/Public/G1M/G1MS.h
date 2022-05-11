@@ -52,7 +52,7 @@ struct G1MS
 		G1MSHeader<bBigEndian> header = reinterpret_cast<G1MSHeader<bBigEndian>*>(buffer + offset);
 		skeletonLayer = header.layer;
 		
-		if (sectionHeader.chunkVersion > 0x30303332) //No global indices before it seems, need to process differently
+		if (sectionHeader.chunkVersion >= 0x30303332) //No global indices before it seems, need to process differently
 		{
 			//Global and local indices map
 			offset += sizeof(G1MSHeader<bBigEndian>);

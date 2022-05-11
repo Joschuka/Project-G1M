@@ -31,9 +31,9 @@ struct OID
 			std::string s = std::string(reinterpret_cast<const char*>(buffer), bufferLen);
 
 			std::string delimiter = "\r\n";
-			uint32_t pos = 0;
+			int pos = 0;
 			std::string token;
-			while ((pos = s.find(delimiter)) != std::string::npos) {
+			while ((pos = s.find(delimiter)) != -1) {
 				token = s.substr(0, pos);
 				if(token.rfind(";", 0) && token.size())
 					nameList.push_back(token);
