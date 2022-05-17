@@ -1293,6 +1293,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 			EG1MGVADatatype cPIdx4Type = EG1MGVADatatype::VADataType_Dummy;
 
 			BYTE* depthFromDriver = nullptr;
+			BYTE* physTanBuffer = nullptr;
 			int32_t phys1Stride = -1;
 			int32_t phys1Count = -1;
 
@@ -1457,7 +1458,11 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					switch (attribute.dataType)
 					{
 					case EG1MGVADatatype::VADataType_Float_x4:
-						if (!bIsPhysType1[smIdx])
+						if (bIsPhysType1[smIdx])
+						{
+							physTanBuffer = vbuf.bufferAdress + attribute.offset;
+						}
+						else
 						{
 							rapi->rpgBindTangentBuffer(vbuf.bufferAdress + attribute.offset, RPGEODATA_FLOAT, vbuf.stride);
 						}
@@ -1738,10 +1743,14 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					//The b and c cross product gives the direction that the point needs to be extruded in, from the driver shape.
 					//The depth buffer gives the distance from the driver, a is the "base position".
 					float depth = *(float*)(depthFromDriver + index + 12);
-					float* debugDepth = (float*)(depthFromDriver + index);
+					//Assume that NUNO normals and tangents always have float semantics, always the case so far. If it changes I'll implement half float support.
+					RichVec3 normalCoords = RichVec3((float*)(depthFromDriver + index)); 
+					RichVec3 tanCoords = RichVec3((float*)(physTanBuffer + index));
 					if (bBigEndian)
 					{
 						LITTLE_BIG_SWAP(depth);
+						normalCoords.ChangeEndian();
+						tanCoords.ChangeEndian();
 					}
 					if (c.Length() == 0) //Should probably check it at the start of the for loop for better performance. Oh well
 					{
@@ -1755,24 +1764,41 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 							else if (cPIdx1Type == EG1MGVADatatype::VADataType_UShort_x4)
 								dstIS[4*j +k] = *(uint16_t*)(controlPointRelativeIndices1 + index + k);
 						}
+
+						//normal coords 
+						float tmp[3];
+						g_mfn->Math_TransformPointByMatrixNoTrans(&(joints + nunMapJointIndex[smIdx])->eData.parent->mat, normalCoords.v, tmp);
+						g_mfn->Math_VecCopy(tmp, normalCoords.v);
+						if (bBigEndian) {
+							normalCoords.ChangeEndian();
+						}
+						g_mfn->Math_VecCopy(normalCoords.v, (float*)(depthFromDriver + index));
 					}
 					else
 					{
 						RichVec3 d = b.Cross(c);
+						normalCoords = b * normalCoords.v[1] + c * normalCoords.v[0] + d * normalCoords.v[2];
+						normalCoords.Normalize();
+						tanCoords = b * tanCoords.v[1] + c * tanCoords.v[0] + d * tanCoords.v[2];
+						tanCoords.Normalize();
+
 						if (bIsNUNO5Global)
 							d = d.Normalized();
 						c = d * depth + a;
 						if (bBigEndian)
 						{
 							c.ChangeEndian();
-							d.ChangeEndian();
+							normalCoords.ChangeEndian();
+							tanCoords.ChangeEndian();
 						}
-						g_mfn->Math_VecCopy(c.v, (float*)(controlPointsWeightsSet1 + index));
-						//g_mfn->Math_VecCopy(d.v, (float*)(depthFromDriver + index));
+						g_mfn->Math_VecCopy(c.v, (float*)(controlPointsWeightsSet1 + index));						
+						g_mfn->Math_VecCopy(normalCoords.v, (float*)(depthFromDriver + index));
+						g_mfn->Math_VecCopy(tanCoords.v, (float*)(physTanBuffer + index));
 					}
 				}
 				rapi->rpgBindPositionBuffer(controlPointsWeightsSet1, RPGEODATA_FLOAT, phys1Stride);
-				rapi->rpgBindNormalBuffer(nullptr, RPGEODATA_FLOAT, phys1Stride);
+				rapi->rpgBindNormalBuffer(depthFromDriver, RPGEODATA_FLOAT, phys1Stride);
+				rapi->rpgBindTangentBuffer(physTanBuffer, RPGEODATA_FLOAT, phys1Stride);
 				if (bHasSkinnedParts && !bNUNO5HasSubsets) //temporary hack to disable anchored cloth for now when NUNO5 has subsets, treat it like the others
 				{
 					rapi->rpgBindBoneIndexBuffer(jointIBFinal, cPIdx1Type == EG1MGVADatatype::VADataType_UByte_x4 ? RPGEODATA_UBYTE : RPGEODATA_USHORT, cPIdx1Type == EG1MGVADatatype::VADataType_UByte_x4 ? 4 : 8, 4);

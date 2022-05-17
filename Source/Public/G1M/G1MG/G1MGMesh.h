@@ -36,7 +36,7 @@ struct G1MGMesh
 			}
 			offset += indexCount * 4;
 		}
-		else
+		else 
 			offset += 4;
 	}
 };
