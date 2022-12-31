@@ -25,6 +25,7 @@ template <bool bBigEndian>
 struct G1TTextureInfo
 {
 	uint8_t mipSys;
+	uint32_t subsys, mip_count;
 	uint8_t textureFormat;
 	uint8_t dxdy;
 	uint8_t extraHeaderVersion;
@@ -43,6 +44,10 @@ struct G1TTextureInfo
 		extraHeaderVersion = *(uint8_t*)(buffer + offset + 7);
 		offset += 8;
 
+		//compute mip_count and subsys
+		mip_count = ((mipSys >> 4) & 0xF);
+		subsys = ((mipSys >> 0) & 0xF);
+
 		//compute width and height
 		height = pow(2, dxdy >> 4);
 		width = pow(2, dxdy & 0xF);
@@ -51,6 +56,10 @@ struct G1TTextureInfo
 			uint32_t temp = width;
 			width = height;
 			height = temp;
+
+			temp = subsys;
+			subsys = mip_count;
+			mip_count = temp;
 		}
 
 		//Extra header
@@ -124,11 +133,12 @@ struct G1T
 		NoesisMisc_Untile1dThin_p NoesisMisc_Untile1dThin = NULL;
 		NoesisMisc_Untile1dThin = (NoesisMisc_Untile1dThin_p)g_nfn->NPAPI_GetUserExtProc("NoesisMisc_Untile1dThin");
 
+		//moved read location to outside of loop, uses read size to find next texture
+		uint32_t offs = offsetList[0];
+		offset = header.tableOffset + offs;
 		//Process textures
 		for (auto i =0;i<offsetList.size(); i++)
 		{
-			uint32_t offs = offsetList[i];
-			offset = header.tableOffset + offs;
 			G1TTextureInfo<bBigEndian> texHeader = G1TTextureInfo<bBigEndian>(buffer,offset);
 
 			bool bNormalized = true;
@@ -302,9 +312,17 @@ struct G1T
 			BYTE* texData = nullptr;
 
 			//Get the data size
-			uint32_t dataSize;
+			uint32_t dataSize = 0;
+			uint32_t originalSize = computedSize;
 			if (computedSize >= 0)
+			{
+				for (auto j = 1; j < texHeader.mip_count; j++) //Mipmap size, skip the first entry which is the full-sized texture
+				{
+					originalSize = originalSize / 4;
+					computedSize += originalSize;
+				}
 				dataSize = computedSize;
+			}
 			else
 			{
 				if (i < header.textureCount - 1)
@@ -313,6 +331,9 @@ struct G1T
 					dataSize = bufferLen - offsetList[i] - texHeader.headerSize - header.tableOffset;
 			}
 
+			//loc for next texture
+			originalSize = dataSize;
+			
 			if (header.platform == EG1TPlatform::X360)
 			{
 				if (bNeedsX360EndianSwap || mortonWidth > 0)
@@ -432,7 +453,10 @@ struct G1T
 					rapi->Noesis_UnpooledFree(params);
 				}
 			}
-
+			
+			//set next read loc
+			offset = offset + originalSize;
+			
 			//Create the texture
 			char texName[128];
 			snprintf(texName, 128, "%d.dds", noeTex.Num());
