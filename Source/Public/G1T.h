@@ -133,12 +133,11 @@ struct G1T
 		NoesisMisc_Untile1dThin_p NoesisMisc_Untile1dThin = NULL;
 		NoesisMisc_Untile1dThin = (NoesisMisc_Untile1dThin_p)g_nfn->NPAPI_GetUserExtProc("NoesisMisc_Untile1dThin");
 
-		//moved read location to outside of loop, uses read size to find next texture
-		uint32_t offs = offsetList[0];
-		offset = header.tableOffset + offs;
 		//Process textures
 		for (auto i =0;i<offsetList.size(); i++)
 		{
+			uint32_t offs = offsetList[i];
+			offset = header.tableOffset + offs;
 			G1TTextureInfo<bBigEndian> texHeader = G1TTextureInfo<bBigEndian>(buffer,offset);
 
 			bool bNormalized = true;
@@ -147,13 +146,14 @@ struct G1T
 			bool bETCAlpha = false;
 			bool bNeedsX360EndianSwap = false;
 			std::string rawFormat ="";
-			int fourccFormat = -1;			
+			int fourccFormat = -1;
 
 			int32_t computedSize = -1;
 			uint32_t mortonWidth = 0;
 			uint32_t width = texHeader.width;
 			uint32_t height = texHeader.height;
-
+			uint32_t originalSize = computedSize;
+			uint32_t pvrtcBpp = 0;
 			switch (texHeader.textureFormat)
 			{
 			case 0x0:
@@ -216,6 +216,10 @@ struct G1T
 				rawFormat = "b5g6r5";
 				computedSize = width * height * 2;
 				break;
+			case 0x35:
+				computedSize = width * height * 2;
+				rawFormat = "a1b5g5r5";
+				break;
 			case 0x36:
 				rawFormat = "a4b4g4r4";
 				computedSize = width * height * 2;
@@ -238,6 +242,11 @@ struct G1T
 			case 0x56:
 				rawFormat = "ETC1_rgb";
 				computedSize = width * height / 2;
+				break;
+			case 0x58:
+				computedSize = width * height / 2;
+				rawFormat = "PVRTC";
+				pvrtcBpp = 4;
 				break;
 			case 0x59:
 				fourccFormat = FOURCC_DXT1;
@@ -293,6 +302,12 @@ struct G1T
 				rawFormat = "ETC1_rgb";
 				computedSize = width * height;
 				bSpecialCaseETC = true;
+				originalSize = computedSize;
+				for (auto j = 1; j < texHeader.mip_count; j++) //Mipmap size, skip the first entry which is the full-sized texture
+				{
+					originalSize = originalSize / 4;
+					computedSize += originalSize;
+				}
 				height *= 2;
 				if (i < offsetList.size() - 1)
 					offsetList[i + 1] = offsetList[i] + texHeader.headerSize + computedSize;
@@ -312,17 +327,9 @@ struct G1T
 			BYTE* texData = nullptr;
 
 			//Get the data size
-			uint32_t dataSize = 0;
-			uint32_t originalSize = computedSize;
+			uint32_t dataSize;
 			if (computedSize >= 0)
-			{
-				for (auto j = 1; j < texHeader.mip_count; j++) //Mipmap size, skip the first entry which is the full-sized texture
-				{
-					originalSize = originalSize / 4;
-					computedSize += originalSize;
-				}
 				dataSize = computedSize;
-			}
 			else
 			{
 				if (i < header.textureCount - 1)
@@ -331,9 +338,6 @@ struct G1T
 					dataSize = bufferLen - offsetList[i] - texHeader.headerSize - header.tableOffset;
 			}
 
-			//loc for next texture
-			originalSize = dataSize;
-			
 			if (header.platform == EG1TPlatform::X360)
 			{
 				if (bNeedsX360EndianSwap || mortonWidth > 0)
@@ -352,7 +356,7 @@ struct G1T
 				switch (header.platform)
 				{
 				case EG1TPlatform::X360:
-				{					
+				{
 					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
 					if (bRaw)
 						rapi->Noesis_UntileImageRAW(untiledTexData, buffer + offset, dataSize, width, height, mortonWidth);
@@ -392,6 +396,14 @@ struct G1T
 						rapi->Image_MortonOrder(buffer + offset, untiledTexData, width>>1, height>>2, mortonWidth, 1);
 					break;
 				}
+			}
+
+			//Decompress PVRTC
+			if (!rawFormat.rfind("PVRTC", 0))
+			{
+				untiledTexData = rapi->Image_DecodePVRTC(buffer + offset, dataSize, width, height, pvrtcBpp);
+				rawFormat = "r8g8b8a8";
+				dataSize *= 8;
 			}
 
 			//Decompress ETC
@@ -440,7 +452,7 @@ struct G1T
 				{
 					texData = rapi->Noesis_ConvertDXT(width, height, untiledTexData, fourccFormat);
 				}
-				else 
+				else
 				{
 					convertDxtExParams_t* params = (convertDxtExParams_t *)rapi->Noesis_UnpooledAlloc(sizeof(convertDxtExParams_t));
 					params->ati2ZScale = 0.0;
@@ -453,10 +465,7 @@ struct G1T
 					rapi->Noesis_UnpooledFree(params);
 				}
 			}
-			
-			//set next read loc
-			offset = offset + originalSize;
-			
+
 			//Create the texture
 			char texName[128];
 			snprintf(texName, 128, "%d.dds", noeTex.Num());
