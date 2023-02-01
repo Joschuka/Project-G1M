@@ -127,8 +127,6 @@ struct G1T
 		//Process textures
 		for (auto i =0;i<offsetList.size(); i++)
 		{
-			uint32_t offs = offsetList[i];
-			offset = header.tableOffset + offs;
 			G1TTextureInfo<bBigEndian> texHeader = G1TTextureInfo<bBigEndian>(buffer,offset);
 
 			bool bNormalized = true;
