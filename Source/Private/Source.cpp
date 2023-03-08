@@ -796,24 +796,21 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					modelBone_t* joint = joints + jointIndex;
 					RichMat43 jointMatrix = RichQuat().ToMat43().GetInverse().m;
 					if (parentID == 0xFFFFFFFF)
-					{
 						parentID = nunParentJointID;
-						g_mfn->Math_VecCopy(p.v, jointMatrix.m.o);
-					}
 					else
-					{
 						parentID += jointStart;
-						RichMat43 mat1 = RichMat43(joints[nunParentJointID].mat);
-						RichMat43 mat2 = RichMat43(joints[parentID].mat);
-						jointMatrix = mat1 * mat2.GetInverse();
-						if (bIsNUNO5Global && link.P5 == 0)
-							jointMatrix = mat1;
-						p = jointMatrix.TransformPoint(p);
-						g_mfn->Math_VecCopy(p.v, jointMatrix.m.o);
-					}
+
+					RichMat43 mat1 = RichMat43(joints[nunParentJointID].mat);
+					RichMat43 mat2 = RichMat43(joints[parentID].mat);
+					jointMatrix = mat1 * mat2.GetInverse();
+					if (bIsNUNO5Global && link.P5 == 0)
+						jointMatrix = mat1;
+					p = jointMatrix.TransformPoint(p);
+					g_mfn->Math_VecCopy(p.v, jointMatrix.m.o);
+
 					RichMat43 mat3 = RichMat43(joints[parentID].mat);
 					joint->mat = (jointMatrix * mat3).m;
-					if(bIsNUNO5Global && link.P5 == 0)//Model space coords if P5 is null, see 79d40f50					
+					if(bIsNUNO5Global && link.P5 == 0)//Model space coords if P5 is null, see 79d40f50	from SoP, 7c68948e from WoLong				
 						joint->mat = jointMatrix.m;
 					if(!bIsNUNO5Global)
 						snprintf(joint->name, 128, "nuno3_p_%d_bone_%d", nunParentJointID,jointIndex);
@@ -1744,8 +1741,8 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					//The depth buffer gives the distance from the driver, a is the "base position".
 					float depth = *(float*)(depthFromDriver + index + 12);
 					//Assume that NUNO normals and tangents always have float semantics, always the case so far. If it changes I'll implement half float support.
-					RichVec3 normalCoords = RichVec3((float*)(depthFromDriver + index)); 
-					RichVec3 tanCoords = RichVec3((float*)(physTanBuffer + index));
+					RichVec3 normalCoords = depthFromDriver ? RichVec3((float*)(depthFromDriver + index)) : RichVec3(); 
+					RichVec3 tanCoords = physTanBuffer ? RichVec3((float*)(physTanBuffer + index)) : RichVec3();
 					if (bBigEndian)
 					{
 						LITTLE_BIG_SWAP(depth);
@@ -1766,21 +1763,30 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 						}
 
 						//normal coords 
-						float tmp[3];
-						g_mfn->Math_TransformPointByMatrixNoTrans(&(joints + nunMapJointIndex[smIdx])->eData.parent->mat, normalCoords.v, tmp);
-						g_mfn->Math_VecCopy(tmp, normalCoords.v);
-						if (bBigEndian) {
-							normalCoords.ChangeEndian();
+						if (depthFromDriver)
+						{
+							float tmp[3];
+							g_mfn->Math_TransformPointByMatrixNoTrans(&(joints + nunMapJointIndex[smIdx])->eData.parent->mat, normalCoords.v, tmp);
+							g_mfn->Math_VecCopy(tmp, normalCoords.v);
+							if (bBigEndian) {
+								normalCoords.ChangeEndian();
+							}
+							g_mfn->Math_VecCopy(normalCoords.v, (float*)(depthFromDriver + index));
 						}
-						g_mfn->Math_VecCopy(normalCoords.v, (float*)(depthFromDriver + index));
 					}
 					else
 					{
 						RichVec3 d = b.Cross(c);
-						normalCoords = b * normalCoords.v[1] + c * normalCoords.v[0] + d * normalCoords.v[2];
-						normalCoords.Normalize();
-						tanCoords = b * tanCoords.v[1] + c * tanCoords.v[0] + d * tanCoords.v[2];
-						tanCoords.Normalize();
+						if (depthFromDriver)
+						{
+							normalCoords = b * normalCoords.v[1] + c * normalCoords.v[0] + d * normalCoords.v[2];
+							normalCoords.Normalize();
+						}
+						if (physTanBuffer)
+						{
+							tanCoords = b * tanCoords.v[1] + c * tanCoords.v[0] + d * tanCoords.v[2];
+							tanCoords.Normalize();
+						}
 
 						if (bIsNUNO5Global)
 							d = d.Normalized();
@@ -1791,14 +1797,18 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 							normalCoords.ChangeEndian();
 							tanCoords.ChangeEndian();
 						}
-						g_mfn->Math_VecCopy(c.v, (float*)(controlPointsWeightsSet1 + index));						
-						g_mfn->Math_VecCopy(normalCoords.v, (float*)(depthFromDriver + index));
-						g_mfn->Math_VecCopy(tanCoords.v, (float*)(physTanBuffer + index));
+						g_mfn->Math_VecCopy(c.v, (float*)(controlPointsWeightsSet1 + index));
+						if(depthFromDriver)
+							g_mfn->Math_VecCopy(normalCoords.v, (float*)(depthFromDriver + index));
+						if(physTanBuffer)
+							g_mfn->Math_VecCopy(tanCoords.v, (float*)(physTanBuffer + index));
 					}
 				}
 				rapi->rpgBindPositionBuffer(controlPointsWeightsSet1, RPGEODATA_FLOAT, phys1Stride);
-				rapi->rpgBindNormalBuffer(depthFromDriver, RPGEODATA_FLOAT, phys1Stride);
-				rapi->rpgBindTangentBuffer(physTanBuffer, RPGEODATA_FLOAT, phys1Stride);
+				if (depthFromDriver)
+					rapi->rpgBindNormalBuffer(depthFromDriver, RPGEODATA_FLOAT, phys1Stride);
+				if (physTanBuffer)
+					rapi->rpgBindTangentBuffer(physTanBuffer, RPGEODATA_FLOAT, phys1Stride);
 				if (bHasSkinnedParts && !bNUNO5HasSubsets) //temporary hack to disable anchored cloth for now when NUNO5 has subsets, treat it like the others
 				{
 					rapi->rpgBindBoneIndexBuffer(jointIBFinal, cPIdx1Type == EG1MGVADatatype::VADataType_UByte_x4 ? RPGEODATA_UBYTE : RPGEODATA_USHORT, cPIdx1Type == EG1MGVADatatype::VADataType_UByte_x4 ? 4 : 8, 4);
@@ -1831,10 +1841,13 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 					}
 					
 					bPID /= 3;
-					uint32_t jID = g1mg.jointPalettes[submesh.bonePaletteIndex].entries[bPID].physicsIndex &0x7FFFFFFF;
-					modelMatrix_t matrix = joints[jID].mat;
-					//Here we assume that the first internal skel has the physics joint's parent (which is always the case on all the samples)
-					transformPosF<bBigEndian>(posB + j*jStride, 1, jStride, &joints[jID].mat);
+					if (bPID < g1mg.jointPalettes[submesh.bonePaletteIndex].entries.size()) //See 0xb2e220c4/0x7c68948e from wolong. Implicit parenting to another internal skel or unneeded transformation?
+					{
+						uint32_t jID = g1mg.jointPalettes[submesh.bonePaletteIndex].entries[bPID].physicsIndex & 0x7FFFFFFF;
+						modelMatrix_t matrix = joints[jID].mat;
+						//Here we assume that the first internal skel has the physics joint's parent (which is always the case on all the samples)
+						transformPosF<bBigEndian>(posB + j * jStride, 1, jStride, &joints[jID].mat);
+					}
 				}
 				rapi->rpgBindPositionBuffer(posB, RPGEODATA_FLOAT, jStride);
 			}
