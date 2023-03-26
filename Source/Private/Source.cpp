@@ -1006,7 +1006,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		}
 
 		//SOFT Chunks
-		for (auto i = 0; i < SOFTFileIDs.size(); i++)		{
+		/*for (auto i = 0; i < SOFTFileIDs.size(); i++) {
 
 			for (auto& soft1 : SOFTs[i].Soft1s)
 			{
@@ -1040,7 +1040,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				}
 
 			}
-		}
+		}*/
 
 
 	}
@@ -1995,7 +1995,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	rapi->rpgClearBufferBinds();
 	rapi->rpgSetBoneMap(nullptr);
 	uint8_t dvmIndex = 0;
-	if (!bDisableNUNNodes)
+	/*if (!bDisableNUNNodes)
 	{
 		for (auto& dvM : driverMeshes)
 		{
@@ -2020,7 +2020,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 			rapi->rpgCommitTriangles(dvM.indexBuffer.address, dvM.indexBuffer.dataType, dvM.indexBuffer.indexCount, dvM.indexBuffer.primType, true);
 			dvmIndex += 1;
 		}
-	}
+	}*/
 
 	//Joints and anims
 	if (joints)

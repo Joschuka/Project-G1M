@@ -365,7 +365,16 @@ struct NUNO
 				//A previous attempt was made to use P1 and P2 but it breaks (see Queen from SoP for an example)
 				for (auto j= 0; j<Nuno3s.size(); j++)
 				{
+
 					NUNO3<bBigEndian>& nun3 = Nuno3s[j];
+
+					//see pc50a from Ryza 3, looks like subset assumption fails on that sample. Temporary hack.
+					if (nun3.parentSetID >= 0) {
+						NUNO3<bBigEndian>& parentNunoEntry = Nuno3s[nun3.parentSetID];
+						if (parentNunoEntry.controlPoints.size() < nun3.controlPoints.size())
+							nun3.parentSetID = -1;
+					}
+
 					if (nun3.parentSetID >= 0 && nunoIDToSubsetMap.count(nun3.parentSetID) == 0) //This entry has a parent entry and its map isn't there yet
 					{
 						//Create the map
