@@ -200,7 +200,8 @@ struct NUNO3
 			//See the BT for more info, I'll just take the necessary values here.
 			uint32_t lodCount = *reinterpret_cast<uint32_t*>(buffer + offset + 8); //Not sure if this is the actual count or if the value is hardcoded
 			entryID = *reinterpret_cast<uint16_t*>(buffer + offset + 20);
-			if (*reinterpret_cast<uint16_t*>(buffer + offset + 22) & 0x7FF)
+			// Second condition added since the subset ID seems to start at 1 sometimes instead of 0 for entries without subset. See pc48a and pc50a from Ryza3.
+			if (*reinterpret_cast<uint16_t*>(buffer + offset + 22) & 0x7FF && (*entryIDToNunoID).count(entryID)) 
 				parentSetID = (*entryIDToNunoID)[entryID];
 
 			offset += 0x24;
@@ -367,13 +368,6 @@ struct NUNO
 				{
 
 					NUNO3<bBigEndian>& nun3 = Nuno3s[j];
-
-					//see pc50a from Ryza 3, looks like subset assumption fails on that sample. Temporary hack.
-					if (nun3.parentSetID >= 0) {
-						NUNO3<bBigEndian>& parentNunoEntry = Nuno3s[nun3.parentSetID];
-						if (parentNunoEntry.controlPoints.size() < nun3.controlPoints.size())
-							nun3.parentSetID = -1;
-					}
 
 					if (nun3.parentSetID >= 0 && nunoIDToSubsetMap.count(nun3.parentSetID) == 0) //This entry has a parent entry and its map isn't there yet
 					{
