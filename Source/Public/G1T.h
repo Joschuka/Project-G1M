@@ -133,6 +133,11 @@ struct G1T
 		NoesisMisc_Untile1dThin_p NoesisMisc_Untile1dThin = NULL;
 		NoesisMisc_Untile1dThin = (NoesisMisc_Untile1dThin_p)g_nfn->NPAPI_GetUserExtProc("NoesisMisc_Untile1dThin");
 
+		//so the file name stays in the texture
+		std::string fileName = rapi->Noesis_GetInputName();
+		fileName.replace(fileName.end() - 4, fileName.end(), "out%d.dds");
+		const char* fileNameC = fileName.c_str();
+
 		//Process textures
 		for (auto i =0;i<offsetList.size(); i++)
 		{
@@ -186,7 +191,6 @@ struct G1T
 			case 0x8:
 				fourccFormat = FOURCC_DXT5;
 				break;
-			case 0x9:
 			case 0xA:
 				rawFormat = "b8g8r8a8";
 				computedSize = width * height * 4;
@@ -242,6 +246,11 @@ struct G1T
 			case 0x56:
 				rawFormat = "ETC1_rgb";
 				computedSize = width * height / 2;
+				break;
+			case 0x57:
+				rawFormat = "PVRTC";
+				computedSize = width * height / 4;
+				pvrtcBpp = 2;
 				break;
 			case 0x58:
 				computedSize = width * height / 2;
@@ -403,7 +412,7 @@ struct G1T
 			{
 				untiledTexData = rapi->Image_DecodePVRTC(buffer + offset, dataSize, width, height, pvrtcBpp);
 				rawFormat = "r8g8b8a8";
-				dataSize *= 8;
+				dataSize *= 16;
 			}
 
 			//Decompress ETC
@@ -468,7 +477,7 @@ struct G1T
 
 			//Create the texture
 			char texName[128];
-			snprintf(texName, 128, "%d.dds", noeTex.Num());
+			snprintf(texName, 128, fileNameC, noeTex.Num());
 			noesisTex_t* texture = rapi->Noesis_TextureAlloc(texName, width, height, texData, NOESISTEX_RGBA32);
 			texture->shouldFreeData = true;
 			texture->globalIdx = noeTex.Num();
