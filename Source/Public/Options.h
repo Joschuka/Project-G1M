@@ -60,6 +60,44 @@ int setG1TMergeG1MOnly(int handle, void* userData)
 	return 1;
 }
 
+//bAnimations
+void getAnimations(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::animations"), buffer, 1))
+	{
+		bAnimations = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bAnimations);
+}
+int setAnimations(int handle, void* userData)
+{
+	bAnimations = !bAnimations;
+	BYTE buffer[1] = { bAnimations };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::animations"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bAnimations);
+	return 1;
+}
+
+//bMatch
+void getMatch(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::match"), buffer, 1))
+	{
+		bMatch = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bMatch);
+}
+int setMatch(int handle, void* userData)
+{
+	bMatch = !bMatch;
+	BYTE buffer[1] = { bMatch };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::match"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bMatch);
+	return 1;
+}
+
 //bAdditive
 void getAdditive(int handle)
 {

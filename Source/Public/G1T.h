@@ -134,8 +134,10 @@ struct G1T
 		NoesisMisc_Untile1dThin = (NoesisMisc_Untile1dThin_p)g_nfn->NPAPI_GetUserExtProc("NoesisMisc_Untile1dThin");
 
 		//so the file name stays in the texture
-		std::string fileName = rapi->Noesis_GetInputName();
-		fileName.replace(fileName.end() - 4, fileName.end(), "out%d.dds");
+		std::string inFile = rapi->Noesis_GetLastCheckedName();
+		std::filesystem::path pathObj(inFile);
+		std::string fileName = pathObj.stem().string();
+		fileName.append("out%d.dds");
 		const char* fileNameC = fileName.c_str();
 
 		//Process textures
