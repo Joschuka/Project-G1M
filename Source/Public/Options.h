@@ -231,6 +231,25 @@ int setEnableLOD(int handle, void* userData)
 	return 1;
 }
 
+//bDebugLog
+void getDebugLog(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::debug"), buffer, 1))
+	{
+		bDebugLog = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bDebugLog);
+}
+int setDebugLog(int handle, void* userData)
+{
+	bDebugLog = !bDebugLog;
+	BYTE buffer[1] = { bDebugLog };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::debug"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bDebugLog);
+	return 1;
+}
+
 //g1t console command
 bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
 {

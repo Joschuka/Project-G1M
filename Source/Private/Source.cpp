@@ -37,6 +37,7 @@ bool bNoTextureRename = false;
 char g1tConsolePath[MAX_NOESIS_PATH];
 bool bEnableNUNAutoRig = true;
 bool bLoadAllLODs = false;
+bool bDebugLog = false;
 
 bool bIsNUNO5Global = false; //As of now I'm not sure how this chunk works when paired with other NUNO5 so I'm adding a quick and dirty option until I discover more.
 bool bNUNO5HasSubsets = false; //Temporary hack to prevent subsets from making anchored cloth to crash
@@ -2344,6 +2345,11 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Load all LODs"));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getEnableLOD(optHandle);
+
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Show debug log"), setDebugLog, nullptr);
+	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Show debug log"));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
+	getDebugLog(optHandle);
 
 	//Console command
 	unsigned char g1tConsoleStore[MAX_NOESIS_PATH];

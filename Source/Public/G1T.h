@@ -113,6 +113,12 @@ struct G1T
 	std::vector<uint32_t> offsetList;
 	G1T(BYTE* buffer, int bufferLen, CArrayList<noesisTex_t*>& noeTex, noeRAPI_t* rapi)
 	{
+		//Open debug log
+		if (bDebugLog)
+		{
+			g_nfn->NPAPI_PopupDebugLog(0);
+		}
+
 		//Read header
 		uint32_t offset = 0;
 		G1THeader<bBigEndian> header = reinterpret_cast<G1THeader<bBigEndian>*>(buffer);
@@ -332,6 +338,12 @@ struct G1T
 				break;
 			}
 
+			char texName0[128];
+			const char* texName0C = rawFormat.c_str();
+			snprintf(texName0, 128, texName0C);
+			g_nfn->NPAPI_DebugLogStr("\nformat: ");
+			g_nfn->NPAPI_DebugLogStr(texName0);
+
 			bool bRaw = (rawFormat != "") ? true : false;
 			BYTE* untiledTexData = nullptr;
 			bool bShouldFreeUntiled = false;
@@ -348,6 +360,11 @@ struct G1T
 				else
 					dataSize = bufferLen - offsetList[i] - texHeader.headerSize - header.tableOffset;
 			}
+
+			char texName1[128];
+			snprintf(texName1, 128, "%d", computedSize);
+			g_nfn->NPAPI_DebugLogStr("\nread size: ");
+			g_nfn->NPAPI_DebugLogStr(texName1);
 
 			if (header.platform == EG1TPlatform::X360)
 			{
@@ -427,7 +444,10 @@ struct G1T
 					dataSize *= 8;
 				}
 				else
+				{
 					rapi->Image_DecodeETC(untiledTexData, buffer + offset, dataSize, width, height, "RGB");
+					dataSize *= 8;
+				}
 				if (bSpecialCaseETC)
 				{
 					height /= 2;
@@ -477,6 +497,20 @@ struct G1T
 				}
 			}
 
+			char texnumber3[128];
+			snprintf(texnumber3, 128, "%d", height);
+			char texnumber4[128];
+			snprintf(texnumber4, 128, "%d", width);
+			g_nfn->NPAPI_DebugLogStr("\nheight: ");
+			g_nfn->NPAPI_DebugLogStr(texnumber3);
+			g_nfn->NPAPI_DebugLogStr("\nwidth: ");
+			g_nfn->NPAPI_DebugLogStr(texnumber4);
+			char texnumber5[128];
+			snprintf(texnumber5, 128, "%d", dataSize);
+			g_nfn->NPAPI_DebugLogStr("\ndataSize: ");
+			g_nfn->NPAPI_DebugLogStr(texnumber4);
+			g_nfn->NPAPI_DebugLogStr("\n");
+
 			//Create the texture
 			char texName[128];
 			snprintf(texName, 128, fileNameC, noeTex.Num());
@@ -484,7 +518,10 @@ struct G1T
 			texture->shouldFreeData = true;
 			texture->globalIdx = noeTex.Num();
 			noeTex.Append(texture);
-			//g_nfn->NPAPI_DebugLogStr(texName);
+
+			g_nfn->NPAPI_DebugLogStr("\ntexName: ");
+			g_nfn->NPAPI_DebugLogStr(texName);
+			g_nfn->NPAPI_DebugLogStr("\n");
 			if(bShouldFreeUntiled)
 				rapi->Noesis_UnpooledFree(untiledTexData);
 		}
