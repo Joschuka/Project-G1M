@@ -237,7 +237,7 @@ void getDebugLog(int handle)
 	BYTE buffer[1];
 	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::debug"), buffer, 1))
 	{
-		bDebugLog = buffer[0] == 1;
+		bDWide = buffer[0] == 1;
 	}
 	g_nfn->NPAPI_CheckToolMenuItem(handle, bDebugLog);
 }
