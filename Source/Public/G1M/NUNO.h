@@ -9,6 +9,10 @@
 #define NUNO4_MAGIC 0x00030004
 #define NUNO5_MAGIC 0x00030005
 
+#define NUNO5FLAG_SKIP0	(1<<0)
+#define NUNO5FLAG_SKIP1	(1<<1)
+#define NUNO5FLAG_SKIP2	(1<<2)
+
 struct NunInfluence
 {
 	int P1;
@@ -196,14 +200,18 @@ struct NUNO3
 			//See the BT for more info, I'll just take the necessary values here.
 			uint32_t lodCount = *reinterpret_cast<uint32_t*>(buffer + offset + 8); //Not sure if this is the actual count or if the value is hardcoded
 			entryID = *reinterpret_cast<uint16_t*>(buffer + offset + 20);
-			if (*reinterpret_cast<uint16_t*>(buffer + offset + 22) & 0x7FF)
+			// Second condition added since the subset ID seems to start at 1 sometimes instead of 0 for entries without subset. See pc48a and pc50a from Ryza3.
+			if (*reinterpret_cast<uint16_t*>(buffer + offset + 22) & 0x7FF && (*entryIDToNunoID).count(entryID)) 
 				parentSetID = (*entryIDToNunoID)[entryID];
 
 			offset += 0x24;
 			for (auto l = 0; l < lodCount; l++)
 			{
+				uint32_t skip10Size = 0;
+				uint32_t skip10Count = 0;
+
 				uint32_t controlPointCount = *reinterpret_cast<uint32_t*>(buffer + offset);
-				uint32_t cpSectionRelatedCount = *reinterpret_cast<uint32_t*>(buffer + offset + 4);
+				uint32_t flags = *reinterpret_cast<uint32_t*>(buffer + offset + 4);
 				uint32_t skip1 = *reinterpret_cast<uint32_t*>(buffer + offset + 8);
 				uint32_t skip2 = *reinterpret_cast<uint32_t*>(buffer + offset + 12);
 				uint32_t skip3 = *reinterpret_cast<uint32_t*>(buffer + offset + 16);
@@ -213,12 +221,18 @@ struct NUNO3
 				uint32_t skip7 = *reinterpret_cast<uint32_t*>(buffer + offset + 32);
 				uint32_t skip8 = *reinterpret_cast<uint32_t*>(buffer + offset + 36);
 				uint32_t skip9 = *reinterpret_cast<uint32_t*>(buffer + offset + 40);
+				uint32_t bUseSkip10 = *reinterpret_cast<uint32_t*>(buffer + offset + 44);
+				if (bUseSkip10)
+				{
+					skip10Size = *reinterpret_cast<uint32_t*>(buffer + offset + 48);
+					skip10Count = *reinterpret_cast<uint32_t*>(buffer + offset + 52);
+				}
 
 				if (bBigEndian)
 				{
 					LITTLE_BIG_SWAP(lodCount);
 					LITTLE_BIG_SWAP(controlPointCount);
-					LITTLE_BIG_SWAP(cpSectionRelatedCount);
+					LITTLE_BIG_SWAP(flags);
 					LITTLE_BIG_SWAP(skip1);
 					LITTLE_BIG_SWAP(skip2);
 					LITTLE_BIG_SWAP(skip3);
@@ -228,8 +242,12 @@ struct NUNO3
 					LITTLE_BIG_SWAP(skip7);
 					LITTLE_BIG_SWAP(skip8);
 					LITTLE_BIG_SWAP(skip9);
+					LITTLE_BIG_SWAP(skip10Count);
+					LITTLE_BIG_SWAP(skip10Size);
 				}
 				offset += 0x30;
+				if (bUseSkip10)
+					offset += 8;
 				uint32_t cpOffset = *reinterpret_cast<uint32_t*>(buffer + offset);
 				if (bBigEndian)
 					LITTLE_BIG_SWAP(cpOffset);
@@ -264,15 +282,20 @@ struct NUNO3
 					offset += controlPointCount * 0x2C;				
 
 				//Skipping the other parts, that define physics parameters and other info that we don't need
-				offset += 0x20 * controlPointCount;
-				if (cpSectionRelatedCount == 3)
+				if (flags & NUNO5FLAG_SKIP0)
+					offset += 0x20 * controlPointCount;
+				if (flags & NUNO5FLAG_SKIP1)
 					offset += 0x18 * controlPointCount;
 				offset += (skip1 * 4 + skip2 * 12 + skip3 * 16 + skip4 * 12 + skip5 * 8 + skip6 * 0x30 + skip7 * 0x48 + skip8*0x20);
+				if (flags & NUNO5FLAG_SKIP2)
+					offset += 0x4 * controlPointCount;
 				for (auto u = 0; u < skip9; u++)
 				{
 					uint32_t tempCount = *reinterpret_cast<uint32_t*>(buffer + offset);
 					offset += (tempCount * 4 + 0x10);
 				}
+				offset += skip10Count * skip10Size;
+				
 			}
 		}
 		entrySize = offset - startOffset;
@@ -324,6 +347,8 @@ struct NUNO
 				break;
 			case NUNO5_MAGIC:
 			{
+				if (header.chunkVersion >= 0x30303335)
+					offset += 4;
 				checkpoint = 0;
 				bIsNUNO5Global = true; //Set the NUNO5 boolean to true for cloth processing. If I ever see NUNO3 and NUNO5 in the same model I'll change the logic.
 				std::map<uint32_t, uint32_t> entryIDToNunoID;
@@ -341,7 +366,9 @@ struct NUNO
 				//A previous attempt was made to use P1 and P2 but it breaks (see Queen from SoP for an example)
 				for (auto j= 0; j<Nuno3s.size(); j++)
 				{
+
 					NUNO3<bBigEndian>& nun3 = Nuno3s[j];
+
 					if (nun3.parentSetID >= 0 && nunoIDToSubsetMap.count(nun3.parentSetID) == 0) //This entry has a parent entry and its map isn't there yet
 					{
 						//Create the map

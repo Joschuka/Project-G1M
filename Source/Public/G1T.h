@@ -28,6 +28,8 @@ struct G1TTextureInfo
 	uint32_t subsys, mip_count;
 	uint8_t textureFormat;
 	uint8_t dxdy;
+	uint8_t unk1;
+	uint8_t unk2;
 	uint8_t extraHeaderVersion;
 	uint32_t headerSize = 0x8;
 
@@ -338,11 +340,14 @@ struct G1T
 				break;
 			}
 
-			char texName0[128];
-			const char* texName0C = rawFormat.c_str();
-			snprintf(texName0, 128, texName0C);
-			g_nfn->NPAPI_DebugLogStr("\nformat: ");
-			g_nfn->NPAPI_DebugLogStr(texName0);
+			if (bDebugLog)
+			{
+				char texName0[128];
+				const char* texName0C = rawFormat.c_str();
+				snprintf(texName0, 128, texName0C);
+				g_nfn->NPAPI_DebugLogStr("\nformat: ");
+				g_nfn->NPAPI_DebugLogStr(texName0);
+			}
 
 			bool bRaw = (rawFormat != "") ? true : false;
 			BYTE* untiledTexData = nullptr;
@@ -361,10 +366,13 @@ struct G1T
 					dataSize = bufferLen - offsetList[i] - texHeader.headerSize - header.tableOffset;
 			}
 
-			char texName1[128];
-			snprintf(texName1, 128, "%d", computedSize);
-			g_nfn->NPAPI_DebugLogStr("\nread size: ");
-			g_nfn->NPAPI_DebugLogStr(texName1);
+			if (bDebugLog)
+			{
+				char texName1[128];
+				snprintf(texName1, 128, "%d", computedSize);
+				g_nfn->NPAPI_DebugLogStr("\nread size: ");
+				g_nfn->NPAPI_DebugLogStr(texName1);
+			}
 
 			if (header.platform == EG1TPlatform::X360)
 			{
@@ -497,19 +505,94 @@ struct G1T
 				}
 			}
 
-			char texnumber3[128];
-			snprintf(texnumber3, 128, "%d", height);
-			char texnumber4[128];
-			snprintf(texnumber4, 128, "%d", width);
-			g_nfn->NPAPI_DebugLogStr("\nheight: ");
-			g_nfn->NPAPI_DebugLogStr(texnumber3);
-			g_nfn->NPAPI_DebugLogStr("\nwidth: ");
-			g_nfn->NPAPI_DebugLogStr(texnumber4);
-			char texnumber5[128];
-			snprintf(texnumber5, 128, "%d", dataSize);
-			g_nfn->NPAPI_DebugLogStr("\ndataSize: ");
-			g_nfn->NPAPI_DebugLogStr(texnumber4);
-			g_nfn->NPAPI_DebugLogStr("\n");
+			if (bttHeight)
+			{
+				//create resize space
+				BYTE* texData2 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData2, width, height*.66, 0);
+				height *= .66;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData2;
+			}
+
+			if (bhHeight)
+			{
+				//create resize space
+				BYTE* texData2 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData2, width, height*.5, 0);
+				height *= .5;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData2;
+			}
+
+			if (btHeight)
+			{
+				//create resize space
+				BYTE* texData2 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData2, width, height*.33, 0);
+				height *= .33;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData2;
+			}
+
+			if (bttWidth)
+			{
+				//create resize space
+				BYTE* texData3 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData3, width*.66, height, 0);
+				width *= .66;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData3;
+			}
+
+			if (bhWidth)
+			{
+				//create resize space
+				BYTE* texData3 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData3, width*.5, height, 0);
+				width *= .5;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData3;
+			}
+
+			if (btWidth)
+			{
+				//create resize space
+				BYTE* texData3 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData3, width*.33, height, 0);
+				width *= .33;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData3;
+			}
+
+			if (bDebugLog)
+			{
+				char texnumber3[128];
+				snprintf(texnumber3, 128, "%d", height);
+				char texnumber4[128];
+				snprintf(texnumber4, 128, "%d", width);
+				g_nfn->NPAPI_DebugLogStr("\nheight: ");
+				g_nfn->NPAPI_DebugLogStr(texnumber3);
+				g_nfn->NPAPI_DebugLogStr("\nwidth: ");
+				g_nfn->NPAPI_DebugLogStr(texnumber4);
+				char texnumber5[128];
+				snprintf(texnumber5, 128, "%d", dataSize);
+				g_nfn->NPAPI_DebugLogStr("\ndataSize: ");
+				g_nfn->NPAPI_DebugLogStr(texnumber4);
+				g_nfn->NPAPI_DebugLogStr("\n");
+			}
 
 			//Create the texture
 			char texName[128];
@@ -519,9 +602,12 @@ struct G1T
 			texture->globalIdx = noeTex.Num();
 			noeTex.Append(texture);
 
-			g_nfn->NPAPI_DebugLogStr("\ntexName: ");
-			g_nfn->NPAPI_DebugLogStr(texName);
-			g_nfn->NPAPI_DebugLogStr("\n");
+			if (bDebugLog)
+			{
+				g_nfn->NPAPI_DebugLogStr("\ntexName: ");
+				g_nfn->NPAPI_DebugLogStr(texName);
+				g_nfn->NPAPI_DebugLogStr("\n");
+			}
 			if(bShouldFreeUntiled)
 				rapi->Noesis_UnpooledFree(untiledTexData);
 		}

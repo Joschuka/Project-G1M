@@ -231,13 +231,127 @@ int setEnableLOD(int handle, void* userData)
 	return 1;
 }
 
+//bhHeight
+void getHalveHeight(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::halveHeight"), buffer, 1))
+	{
+		bhHeight = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bhHeight);
+}
+int setHalveHeight(int handle, void* userData)
+{
+	bhHeight = !bhHeight;
+	BYTE buffer[1] = { bhHeight };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::halveHeight"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bhHeight);
+	return 1;
+}
+
+//bhWidth
+void getHalveWidth(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::halveWidth"), buffer, 1))
+	{
+		bhWidth = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bhWidth);
+}
+int setHalveWidth(int handle, void* userData)
+{
+	bhWidth = !bhWidth;
+	BYTE buffer[1] = { bhWidth };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::halveWidth"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bhWidth);
+	return 1;
+}
+
+//btHeight
+void getThirdHeight(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::thirdHeight"), buffer, 1))
+	{
+		btHeight = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, btHeight);
+}
+int setThirdHeight(int handle, void* userData)
+{
+	btHeight = !btHeight;
+	BYTE buffer[1] = { btHeight };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::thirdHeight"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, btHeight);
+	return 1;
+}
+
+//bttWidth
+void getThirdWidth(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::thirdWidth"), buffer, 1))
+	{
+		btWidth = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, btWidth);
+}
+int setThirdWidth(int handle, void* userData)
+{
+	btWidth = !btWidth;
+	BYTE buffer[1] = { btWidth };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::thirdWidth"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, btWidth);
+	return 1;
+}
+
+//bttHeight
+void getTwoThirdHeight(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::twoThirdHeight"), buffer, 1))
+	{
+		bttHeight = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bttHeight);
+}
+int setTwoThirdHeight(int handle, void* userData)
+{
+	bttHeight = !bttHeight;
+	BYTE buffer[1] = { bttHeight };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::twoThirdHeight"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bttHeight);
+	return 1;
+}
+
+//btWidth
+void getTwoThirdWidth(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::thirdWidth"), buffer, 1))
+	{
+		bttWidth = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bttWidth);
+}
+int setTwoThirdWidth(int handle, void* userData)
+{
+	bttWidth = !bttWidth;
+	BYTE buffer[1] = { bttWidth };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::thirdWidth"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bttWidth);
+	return 1;
+}
+
 //bDebugLog
 void getDebugLog(int handle)
 {
 	BYTE buffer[1];
 	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::debug"), buffer, 1))
 	{
-		bDWide = buffer[0] == 1;
+		bDebugLog = buffer[0] == 1;
 	}
 	g_nfn->NPAPI_CheckToolMenuItem(handle, bDebugLog);
 }
@@ -263,7 +377,7 @@ bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
 		strcpy(g1tConsolePath, "");
 		return false;
 	}
-		
+
 }
 
 void g1tConsoleReset(unsigned char* store, int storeSize)
