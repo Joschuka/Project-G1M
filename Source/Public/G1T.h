@@ -169,6 +169,8 @@ struct G1T
 			uint32_t height = texHeader.height;
 			uint32_t originalSize = computedSize;
 			uint32_t pvrtcBpp = 0;
+			int ASTCblock1 = 0;
+			int	ASTCblock2 = 0;
 			switch (texHeader.textureFormat)
 			{
 			case 0x0:
@@ -336,6 +338,12 @@ struct G1T
 				computedSize = width * height;
 				bETCAlpha = true;
 				break;
+			case 0x7D:
+				rawFormat = "ASTC_8_8";
+				ASTCblock1 = 8;
+				ASTCblock2 = 8;
+				computedSize = width * height / 4;
+				break;
 			default:
 				break;
 			}
@@ -438,6 +446,17 @@ struct G1T
 			if (!rawFormat.rfind("PVRTC", 0))
 			{
 				untiledTexData = rapi->Image_DecodePVRTC(buffer + offset, dataSize, width, height, pvrtcBpp);
+				rawFormat = "r8g8b8a8";
+				dataSize *= 16;
+			}
+
+			//Decompress ASTC
+			if (!rawFormat.rfind("ASTC", 0))
+			{
+				int pBlockDims[3] = { ASTCblock1, ASTCblock2, 1 };
+				int pImageSize[3] = { width, height, 1 };
+				untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize * 16);
+				rapi->Image_DecodeASTC(untiledTexData, buffer + offset, dataSize, pBlockDims, pImageSize);
 				rawFormat = "r8g8b8a8";
 				dataSize *= 16;
 			}
