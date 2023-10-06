@@ -28,8 +28,6 @@ bool bMerge = false;
 bool bMergeG1MOnly = false;
 bool bG1TMergeG1MOnly = false;
 bool bAdditive = false;
-bool bAnimations = false;
-bool bMatch = false;
 bool bColor = false;
 bool bDisplayDriver = false;
 bool bDisableNUNNodes = false;
@@ -37,13 +35,6 @@ bool bNoTextureRename = false;
 char g1tConsolePath[MAX_NOESIS_PATH];
 bool bEnableNUNAutoRig = true;
 bool bLoadAllLODs = false;
-bool bDebugLog = false;
-bool bhHeight = false;
-bool bhWidth = false;
-bool btHeight = false;
-bool btWidth = false;
-bool bttHeight = false;
-bool bttWidth = false;
 
 bool bIsNUNO5Global = false; //As of now I'm not sure how this chunk works when paired with other NUNO5 so I'm adding a quick and dirty option until I discover more.
 bool bNUNO5HasSubsets = false; //Temporary hack to prevent subsets from making anchored cloth to crash
@@ -131,13 +122,6 @@ noesisModel_t* LoadMap(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* 
 	datatableBuf = nullptr;
 	return mdlResult;
 }
-
-template<bool bBigEndian>
-std::string removeExtension(const std::string& filePath) {
-	std::filesystem::path pathObj(filePath);
-	std::string fileName = pathObj.stem().string();
-	return fileName;
-};
 
 template<bool bBigEndian>
 noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAPI_t* rapi, bool bIsMap,
@@ -249,123 +233,10 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	else
 	{
 		//Get all the g1m paths if the option was selected
-		if (bMerge || bMatch || bAnimations)
+		if (bMerge)
 		{
-			std::filesystem::path inFile1 = rapi->Noesis_GetLastCheckedName();
-			std::filesystem::path pathObj(inFile1);
-
-			// Extract the stem (file name without extension)
-			std::string fileName = pathObj.stem().string();
-
-			/*const char* fileNameC = fileName.c_str();
-			char texnumber1[128];
-			snprintf(texnumber1, 128, fileNameC);
-			g_nfn->NPAPI_DebugLogStr("File Name:\n");
-			g_nfn->NPAPI_DebugLogStr(texnumber1);
-			g_nfn->NPAPI_DebugLogStr("\n");*/
-
-			std::string fileNumber = "";
-
-			for (char c : fileName) {
-				if (std::isdigit(c)) {
-					fileNumber += c;
-				}
-			}
-
-			// Remove any leading zeros
-			fileNumber.erase(0, fileNumber.find_first_not_of('0'));
-
-			/*const char* fileNumberC = fileNumber.c_str();
-			char texnumber2[128];
-			snprintf(texnumber2, 128, fileNumberC);
-			g_nfn->NPAPI_DebugLogStr("File Number:\n");
-			g_nfn->NPAPI_DebugLogStr(texnumber2);
-			g_nfn->NPAPI_DebugLogStr("\n\n");*/
-
-			std::filesystem::path inFile = rapi->Noesis_GetLastCheckedName();
-
-			if (bMatch && inFile.extension() == ".g1m")
-			{
-				for (auto& p : std::filesystem::directory_iterator(inFile.parent_path()))
-				{
-
-					std::string path_test = p.path().filename().string();
-					std::filesystem::path pathObj2(path_test);
-
-					std::string fileName2 = pathObj2.stem().string();
-
-					/*const char* fileName2C = fileName2.c_str();
-					char texnumber3[128];
-					snprintf(texnumber3, 128, fileName2C);
-					g_nfn->NPAPI_DebugLogStr("File Load Name:\n");
-					g_nfn->NPAPI_DebugLogStr(texnumber3);
-					g_nfn->NPAPI_DebugLogStr("\n"); */
-
-					std::string fileNumber2 = "";
-					for (char c : fileName2) {
-						if (std::isdigit(c)) {
-							fileNumber2 += c;
-						}
-					}
-
-					// Remove any leading zeros
-					fileNumber2.erase(0, fileNumber2.find_first_not_of('0'));
-
-					/*const char* fileNumber2C = fileNumber2.c_str();
-					char texnumber4[128];
-					snprintf(texnumber4, 128, fileNumber2C);
-					g_nfn->NPAPI_DebugLogStr("File Load Number:\n");
-					g_nfn->NPAPI_DebugLogStr(texnumber4);
-					g_nfn->NPAPI_DebugLogStr("\n"); */
-
-					if ((fileName == fileName2 && p.path().extension() == ".g1m") ||
-						(fileNumber != "" && fileNumber == fileNumber2 && p.path().extension() == ".g1m"))
-					{
-						/*g_nfn->NPAPI_DebugLogStr("Matched G1M:\n");
-						g_nfn->NPAPI_DebugLogStr(texnumber1);
-						g_nfn->NPAPI_DebugLogStr("\n"); */
-
-						g1mPaths.push_back(p.path().string());
-					}
-					if ((fileName == fileName2 && p.path().extension() == ".g1t") ||
-						(fileNumber != "" && fileNumber == fileNumber2 && p.path().extension() == ".g1t"))
-					{
-
-						/*g_nfn->NPAPI_DebugLogStr("Matched G1T:\n");
-						g_nfn->NPAPI_DebugLogStr(texnumber1);
-						g_nfn->NPAPI_DebugLogStr("\n");*/
-
-						g1tPaths.push_back(p.path().string());
-					}
-				}
-			}
-			if (bAnimations)
-			{
-				for (auto& p : std::filesystem::directory_iterator(inFile.parent_path()))
-				{
-					if (p.path().extension() == ".g1a")
-					{
-						/*std::string aniName = pathObj.stem().string();
-						const char* aniName2 = aniName.c_str();
-						char texnumber5[128];
-						snprintf(texnumber5, 128, aniName2);
-						g_nfn->NPAPI_DebugLogStr("Ani Name:\n");
-						g_nfn->NPAPI_DebugLogStr(texnumber5);
-						g_nfn->NPAPI_DebugLogStr("\n");*/
-
-						g1aPaths.push_back(p.path().string());
-						g1aFileNames.push_back(p.path().stem().string());
-					}
-					if (p.path().extension() == ".g2a")
-					{
-						g2aPaths.push_back(p.path().string());
-						g2aFileNames.push_back(p.path().stem().string());
-					}
-				}
-			}
+			std::filesystem::path inFile = rapi->Noesis_GetInputName();
 			//for (auto& p : std::filesystem::recursive_directory_iterator(inFile.parent_path()))
-			if(bMerge)
-			{
 			for (auto& p : std::filesystem::directory_iterator(inFile.parent_path()))
 			{
 				if (p.path().extension() == ".g1m")
@@ -385,8 +256,6 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 				if ((p.path().extension() == ".oid" || has_suffix(p.path().filename().string(), "Oid.bin")) && !bAlreadyHasOid)
 					oidPaths.push_back(p.path().string());
 			}
-		}
-			
 		}
 		else
 		{
@@ -556,7 +425,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		break;
 	}
 
-	if ((bG1TMergeG1MOnly || strcmp(g1tConsolePath, "")) && (!bMerge || !bMatch || bMergeG1MOnly))
+	if ((bG1TMergeG1MOnly || strcmp(g1tConsolePath, "")) && (!bMerge || bMergeG1MOnly))
 	{
 		
 		if (!strcmp(g1tConsolePath, ""))
@@ -2217,7 +2086,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	}
 
 	//Freeing file buffers
-	if ((bMerge || bMatch) && !bIsMap)
+	if (bMerge && !bIsMap)
 	{
 		for (auto& f : fileBuffers)
 		{
@@ -2310,16 +2179,6 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getMerge(optHandle);
 
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Load all animations in same folder"), setAnimations, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Loads all the g1a/g2a files in the same folder."));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getAnimations(optHandle);
-
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Load matching g1t file with model"), setMatch, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Loads matching gt1 to model file in same folder."));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getMatch(optHandle);
-
 	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Only models when merging"), setMergeG1MOnly, nullptr);
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("If the merging option is set, only merge the g1m files and ignore the others."));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
@@ -2351,7 +2210,7 @@ bool NPAPI_InitLocal(void)
 	getDisableNUNNodes(optHandle);
 
 	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("No first texture rename"), setNoTextureRename, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Does not rename the first texture"));
+	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Do not rename the first texture to 0.dds."));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getNoTextureRename(optHandle);
 
@@ -2364,41 +2223,6 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Load all LODs"));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getEnableLOD(optHandle);
-
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Halve height of texture"), setHalveHeight, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Halve height of texture"));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getHalveHeight(optHandle);
-
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Halve width of texture"), setHalveWidth, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Halve width of texture"));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getHalveWidth(optHandle);
-
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Thirds height of texture"), setThirdHeight, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Thirds height of texture"));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getThirdHeight(optHandle);
-
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Thirds width of texture"), setThirdWidth, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Thirds width of texture"));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getThirdWidth(optHandle);
-
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Two thirds height of texture"), setTwoThirdHeight, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Two thirds height of texture"));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getTwoThirdHeight(optHandle);
-
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Two thirds width of texture"), setTwoThirdWidth, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Two thirds width of texture"));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getTwoThirdWidth(optHandle);
-
-	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Show debug log"), setDebugLog, nullptr);
-	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Show debug log"));
-	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
-	getDebugLog(optHandle);
 
 	//Console command
 	unsigned char g1tConsoleStore[MAX_NOESIS_PATH];
