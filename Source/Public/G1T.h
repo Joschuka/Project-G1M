@@ -21,6 +21,44 @@ enum class EG1TPlatform : uint32_t
 	NSwitch = 0x10,
 };
 
+enum class EG1TASTCFormat : uint8_t //Most of these are educated guesses based on a few confirmed ones
+{
+	ASTC_4_4 = 0x0, //Confirmed
+	ASTC_5_4 = 0x1,
+	ASTC_5_5 = 0x2,
+	ASTC_6_5 = 0x3,
+	ASTC_6_6 = 0x4,
+	ASTC_8_5 = 0x5,
+	ASTC_8_6 = 0x6,
+	ASTC_8_8 = 0x7, //Confirmed
+	ASTC_10_5 = 0x8,
+	ASTC_10_6 = 0x9,
+	ASTC_10_8 = 0xA,
+	ASTC_10_10 = 0xB,
+	ASTC_12_10 = 0xC,
+	ASTC_12_12 = 0xD,
+};
+
+template <bool bBigEndian>
+struct G1TASTCExtraInfo
+{
+	uint16_t unk0;
+	uint16_t unk1;
+	EG1TASTCFormat format;
+	uint8_t unk2;
+	uint16_t unk3;
+
+	G1TASTCExtraInfo(G1TASTCExtraInfo* ptr) : G1TASTCExtraInfo(*ptr)
+	{
+		if (bBigEndian)
+		{
+			LITTLE_BIG_SWAP(unk0);
+			LITTLE_BIG_SWAP(unk1);
+			LITTLE_BIG_SWAP(unk3);
+		}
+	}
+};
+
 template <bool bBigEndian>
 struct G1TTextureInfo
 {
@@ -97,6 +135,7 @@ struct G1THeader
 	uint32_t tableOffset;
 	uint32_t textureCount;
 	EG1TPlatform platform;
+	uint32_t ASTCExtraInfoSize;
 
 	G1THeader(G1THeader* ptr) : G1THeader(*ptr)
 	{
@@ -105,6 +144,7 @@ struct G1THeader
 			LITTLE_BIG_SWAP(tableOffset);
 			LITTLE_BIG_SWAP(textureCount);
 			LITTLE_BIG_SWAP(platform);
+			LITTLE_BIG_SWAP(ASTCExtraInfoSize);
 		}
 	}
 };
@@ -113,6 +153,7 @@ template <bool bBigEndian>
 struct G1T
 {
 	std::vector<uint32_t> offsetList;
+	std::vector<G1TASTCExtraInfo<bBigEndian>> ASTCExtraInfoList;
 	G1T(BYTE* buffer, int bufferLen, CArrayList<noesisTex_t*>& noeTex, noeRAPI_t* rapi)
 	{
 		//Read header
@@ -127,6 +168,13 @@ struct G1T
 		{
 			for (auto& offs : offsetList)
 				LITTLE_BIG_SWAP(offs);
+		}
+		offset += header.textureCount * 4;
+
+		//Get ASTC extra info
+		for (auto i = 0; i < header.ASTCExtraInfoSize/4; i++)
+		{
+			ASTCExtraInfoList.push_back(reinterpret_cast<G1TASTCExtraInfo<bBigEndian>*>(buffer + offset + 8*i));
 		}
 
 		//Get operators ready
@@ -324,8 +372,7 @@ struct G1T
 				bETCAlpha = true;
 				break;
 			case 0x7D:
-				rawFormat = "ASTC_8_8";
-				computedSize = width * height / 4;
+				rawFormat = "ASTC";
 				break;
 			default:
 				break;
@@ -418,7 +465,55 @@ struct G1T
 
 			//Decompress ASTC
 			if (!rawFormat.rfind("ASTC", 0))
-			{
+			{				
+				switch (ASTCExtraInfoList[i].format)
+				{
+				case EG1TASTCFormat::ASTC_4_4:
+					rawFormat = "ASTC_4_4";
+					break;
+				case EG1TASTCFormat::ASTC_5_4:
+					rawFormat = "ASTC_5_4";
+					break;
+				case EG1TASTCFormat::ASTC_5_5:
+					rawFormat = "ASTC_5_5";
+					break;
+				case EG1TASTCFormat::ASTC_6_5:
+					rawFormat = "ASTC_6_5";
+					break;
+				case EG1TASTCFormat::ASTC_6_6:
+					rawFormat = "ASTC_6_6";
+					break;
+				case EG1TASTCFormat::ASTC_8_5:
+					rawFormat = "ASTC_8_5";
+					break;
+				case EG1TASTCFormat::ASTC_8_6:
+					rawFormat = "ASTC_8_6";
+					break;
+				case EG1TASTCFormat::ASTC_8_8:
+					rawFormat = "ASTC_8_8";
+					break;
+				case EG1TASTCFormat::ASTC_10_5:
+					rawFormat = "ASTC_10_5";
+					break;
+				case EG1TASTCFormat::ASTC_10_6:
+					rawFormat = "ASTC_10_6";
+					break;
+				case EG1TASTCFormat::ASTC_10_8:
+					rawFormat = "ASTC_10_8";
+					break;
+				case EG1TASTCFormat::ASTC_10_10:
+					rawFormat = "ASTC_10_10";
+					break;
+				case EG1TASTCFormat::ASTC_12_10:
+					rawFormat = "ASTC_12_10";
+					break;
+				case EG1TASTCFormat::ASTC_12_12:
+					rawFormat = "ASTC_12_12";
+					break;
+				default:
+					assert(0);
+				}
+
 				std::regex reg("_");
 				std::sregex_token_iterator iter(rawFormat.begin(), rawFormat.end(), reg, -1);
 				std::sregex_token_iterator end;
