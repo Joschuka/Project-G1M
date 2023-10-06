@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <array>
+#include <regex>
 
 #include "../Public/G1M.h"
 #include "../Public/G1T.h"
