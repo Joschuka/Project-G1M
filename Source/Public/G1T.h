@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef G1T_H
-#define G1T_
+#define G1T_H
 
 enum class EG1TPlatform : uint32_t
 {
