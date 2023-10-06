@@ -25,8 +25,11 @@ template <bool bBigEndian>
 struct G1TTextureInfo
 {
 	uint8_t mipSys;
+	uint32_t subsys, mip_count;
 	uint8_t textureFormat;
 	uint8_t dxdy;
+	uint8_t unk1;
+	uint8_t unk2;
 	uint8_t extraHeaderVersion;
 	uint32_t headerSize = 0x8;
 
@@ -43,6 +46,10 @@ struct G1TTextureInfo
 		extraHeaderVersion = *(uint8_t*)(buffer + offset + 7);
 		offset += 8;
 
+		//compute mip_count and subsys
+		mip_count = ((mipSys >> 4) & 0xF);
+		subsys = ((mipSys >> 0) & 0xF);
+
 		//compute width and height
 		height = pow(2, dxdy >> 4);
 		width = pow(2, dxdy & 0xF);
@@ -51,6 +58,10 @@ struct G1TTextureInfo
 			uint32_t temp = width;
 			width = height;
 			height = temp;
+
+			temp = subsys;
+			subsys = mip_count;
+			mip_count = temp;
 		}
 
 		//Extra header
@@ -104,6 +115,12 @@ struct G1T
 	std::vector<uint32_t> offsetList;
 	G1T(BYTE* buffer, int bufferLen, CArrayList<noesisTex_t*>& noeTex, noeRAPI_t* rapi)
 	{
+		//Open debug log
+		if (bDebugLog)
+		{
+			g_nfn->NPAPI_PopupDebugLog(0);
+		}
+
 		//Read header
 		uint32_t offset = 0;
 		G1THeader<bBigEndian> header = reinterpret_cast<G1THeader<bBigEndian>*>(buffer);
@@ -124,6 +141,13 @@ struct G1T
 		NoesisMisc_Untile1dThin_p NoesisMisc_Untile1dThin = NULL;
 		NoesisMisc_Untile1dThin = (NoesisMisc_Untile1dThin_p)g_nfn->NPAPI_GetUserExtProc("NoesisMisc_Untile1dThin");
 
+		//so the file name stays in the texture
+		std::string inFile = rapi->Noesis_GetLastCheckedName();
+		std::filesystem::path pathObj(inFile);
+		std::string fileName = pathObj.stem().string();
+		fileName.append("out%d.dds");
+		const char* fileNameC = fileName.c_str();
+
 		//Process textures
 		for (auto i =0;i<offsetList.size(); i++)
 		{
@@ -137,13 +161,16 @@ struct G1T
 			bool bETCAlpha = false;
 			bool bNeedsX360EndianSwap = false;
 			std::string rawFormat ="";
-			int fourccFormat = -1;			
+			int fourccFormat = -1;
 
 			int32_t computedSize = -1;
 			uint32_t mortonWidth = 0;
 			uint32_t width = texHeader.width;
 			uint32_t height = texHeader.height;
-
+			uint32_t originalSize = computedSize;
+			uint32_t pvrtcBpp = 0;
+			int ASTCblock1 = 0;
+			int	ASTCblock2 = 0;
 			switch (texHeader.textureFormat)
 			{
 			case 0x0:
@@ -176,7 +203,6 @@ struct G1T
 			case 0x8:
 				fourccFormat = FOURCC_DXT5;
 				break;
-			case 0x9:
 			case 0xA:
 				rawFormat = "b8g8r8a8";
 				computedSize = width * height * 4;
@@ -206,6 +232,10 @@ struct G1T
 				rawFormat = "b5g6r5";
 				computedSize = width * height * 2;
 				break;
+			case 0x35:
+				computedSize = width * height * 2;
+				rawFormat = "a1b5g5r5";
+				break;
 			case 0x36:
 				rawFormat = "a4b4g4r4";
 				computedSize = width * height * 2;
@@ -228,6 +258,16 @@ struct G1T
 			case 0x56:
 				rawFormat = "ETC1_rgb";
 				computedSize = width * height / 2;
+				break;
+			case 0x57:
+				rawFormat = "PVRTC";
+				computedSize = width * height / 4;
+				pvrtcBpp = 2;
+				break;
+			case 0x58:
+				computedSize = width * height / 2;
+				rawFormat = "PVRTC";
+				pvrtcBpp = 4;
 				break;
 			case 0x59:
 				fourccFormat = FOURCC_DXT1;
@@ -283,6 +323,12 @@ struct G1T
 				rawFormat = "ETC1_rgb";
 				computedSize = width * height;
 				bSpecialCaseETC = true;
+				originalSize = computedSize;
+				for (auto j = 1; j < texHeader.mip_count; j++) //Mipmap size, skip the first entry which is the full-sized texture
+				{
+					originalSize = originalSize / 4;
+					computedSize += originalSize;
+				}
 				height *= 2;
 				if (i < offsetList.size() - 1)
 					offsetList[i + 1] = offsetList[i] + texHeader.headerSize + computedSize;
@@ -292,8 +338,23 @@ struct G1T
 				computedSize = width * height;
 				bETCAlpha = true;
 				break;
+			case 0x7D:
+				rawFormat = "ASTC_8_8";
+				ASTCblock1 = 8;
+				ASTCblock2 = 8;
+				computedSize = width * height / 4;
+				break;
 			default:
 				break;
+			}
+
+			if (bDebugLog)
+			{
+				char texName0[128];
+				const char* texName0C = rawFormat.c_str();
+				snprintf(texName0, 128, texName0C);
+				g_nfn->NPAPI_DebugLogStr("\nformat: ");
+				g_nfn->NPAPI_DebugLogStr(texName0);
 			}
 
 			bool bRaw = (rawFormat != "") ? true : false;
@@ -311,6 +372,14 @@ struct G1T
 					dataSize = offsetList[i + 1] - offsetList[i] - texHeader.headerSize;
 				else
 					dataSize = bufferLen - offsetList[i] - texHeader.headerSize - header.tableOffset;
+			}
+
+			if (bDebugLog)
+			{
+				char texName1[128];
+				snprintf(texName1, 128, "%d", computedSize);
+				g_nfn->NPAPI_DebugLogStr("\nread size: ");
+				g_nfn->NPAPI_DebugLogStr(texName1);
 			}
 
 			if (header.platform == EG1TPlatform::X360)
@@ -331,7 +400,7 @@ struct G1T
 				switch (header.platform)
 				{
 				case EG1TPlatform::X360:
-				{					
+				{
 					untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
 					if (bRaw)
 						rapi->Noesis_UntileImageRAW(untiledTexData, buffer + offset, dataSize, width, height, mortonWidth);
@@ -373,6 +442,25 @@ struct G1T
 				}
 			}
 
+			//Decompress PVRTC
+			if (!rawFormat.rfind("PVRTC", 0))
+			{
+				untiledTexData = rapi->Image_DecodePVRTC(buffer + offset, dataSize, width, height, pvrtcBpp);
+				rawFormat = "r8g8b8a8";
+				dataSize *= 16;
+			}
+
+			//Decompress ASTC
+			if (!rawFormat.rfind("ASTC", 0))
+			{
+				int pBlockDims[3] = { ASTCblock1, ASTCblock2, 1 };
+				int pImageSize[3] = { width, height, 1 };
+				untiledTexData = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize * 16);
+				rapi->Image_DecodeASTC(untiledTexData, buffer + offset, dataSize, pBlockDims, pImageSize);
+				rawFormat = "r8g8b8a8";
+				dataSize *= 16;
+			}
+
 			//Decompress ETC
 			if (!rawFormat.rfind("ETC",0))
 			{
@@ -383,7 +471,10 @@ struct G1T
 					dataSize *= 8;
 				}
 				else
+				{
 					rapi->Image_DecodeETC(untiledTexData, buffer + offset, dataSize, width, height, "RGB");
+					dataSize *= 8;
+				}
 				if (bSpecialCaseETC)
 				{
 					height /= 2;
@@ -419,7 +510,7 @@ struct G1T
 				{
 					texData = rapi->Noesis_ConvertDXT(width, height, untiledTexData, fourccFormat);
 				}
-				else 
+				else
 				{
 					convertDxtExParams_t* params = (convertDxtExParams_t *)rapi->Noesis_UnpooledAlloc(sizeof(convertDxtExParams_t));
 					params->ati2ZScale = 0.0;
@@ -433,14 +524,109 @@ struct G1T
 				}
 			}
 
+			if (bttHeight)
+			{
+				//create resize space
+				BYTE* texData2 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData2, width, height*.66, 0);
+				height *= .66;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData2;
+			}
+
+			if (bhHeight)
+			{
+				//create resize space
+				BYTE* texData2 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData2, width, height*.5, 0);
+				height *= .5;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData2;
+			}
+
+			if (btHeight)
+			{
+				//create resize space
+				BYTE* texData2 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData2, width, height*.33, 0);
+				height *= .33;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData2;
+			}
+
+			if (bttWidth)
+			{
+				//create resize space
+				BYTE* texData3 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData3, width*.66, height, 0);
+				width *= .66;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData3;
+			}
+
+			if (bhWidth)
+			{
+				//create resize space
+				BYTE* texData3 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData3, width*.5, height, 0);
+				width *= .5;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData3;
+			}
+
+			if (btWidth)
+			{
+				//create resize space
+				BYTE* texData3 = (BYTE*)rapi->Noesis_UnpooledAlloc(dataSize);
+				//resize
+				rapi->Noesis_ResampleImageNearest(texData, width, height, texData3, width*.33, height, 0);
+				width *= .33;
+				//replace
+				rapi->Noesis_UnpooledFree(texData);
+				texData = texData3;
+			}
+
+			if (bDebugLog)
+			{
+				char texnumber3[128];
+				snprintf(texnumber3, 128, "%d", height);
+				char texnumber4[128];
+				snprintf(texnumber4, 128, "%d", width);
+				g_nfn->NPAPI_DebugLogStr("\nheight: ");
+				g_nfn->NPAPI_DebugLogStr(texnumber3);
+				g_nfn->NPAPI_DebugLogStr("\nwidth: ");
+				g_nfn->NPAPI_DebugLogStr(texnumber4);
+				char texnumber5[128];
+				snprintf(texnumber5, 128, "%d", dataSize);
+				g_nfn->NPAPI_DebugLogStr("\ndataSize: ");
+				g_nfn->NPAPI_DebugLogStr(texnumber4);
+				g_nfn->NPAPI_DebugLogStr("\n");
+			}
+
 			//Create the texture
 			char texName[128];
-			snprintf(texName, 128, "%d.dds", noeTex.Num());
+			snprintf(texName, 128, fileNameC, noeTex.Num());
 			noesisTex_t* texture = rapi->Noesis_TextureAlloc(texName, width, height, texData, NOESISTEX_RGBA32);
 			texture->shouldFreeData = true;
 			texture->globalIdx = noeTex.Num();
 			noeTex.Append(texture);
-			//g_nfn->NPAPI_DebugLogStr(texName);
+
+			if (bDebugLog)
+			{
+				g_nfn->NPAPI_DebugLogStr("\ntexName: ");
+				g_nfn->NPAPI_DebugLogStr(texName);
+				g_nfn->NPAPI_DebugLogStr("\n");
+			}
 			if(bShouldFreeUntiled)
 				rapi->Noesis_UnpooledFree(untiledTexData);
 		}
