@@ -1996,7 +1996,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	rapi->rpgClearBufferBinds();
 	rapi->rpgSetBoneMap(nullptr);
 	uint8_t dvmIndex = 0;
-	/*if (!bDisableNUNNodes)
+	if (!bDisableNUNNodes)
 	{
 		for (auto& dvM : driverMeshes)
 		{
@@ -2021,7 +2021,7 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 			rapi->rpgCommitTriangles(dvM.indexBuffer.address, dvM.indexBuffer.dataType, dvM.indexBuffer.indexCount, dvM.indexBuffer.primType, true);
 			dvmIndex += 1;
 		}
-	}*/
+	}
 
 	//Joints and anims
 	if (joints)

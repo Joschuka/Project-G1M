@@ -210,7 +210,7 @@ struct G2A
 					bNeedsExtra = true;
 				}
 
-				for (auto k = 0; k < keyFrameCount - 1; k++)
+				for (auto k = 0; k < keyFrameTimings.size() - 1; k++)
 				{
 					uint32_t keyframe1 = keyFrameTimings[k];
 					uint32_t keyframe2 = keyFrameTimings[k + 1];
@@ -255,6 +255,7 @@ struct G2A
 						{
 							function1(quantizedData[k], temp1, l, keyframe2 - keyframe1);
 							for (auto& v : temp1.v)
+								//animationData.push_back(std::move(v));
 								animationData.push_back(std::move(v));
 							noeKeyFrameData_t noeKfValue;
 							memset(&noeKfValue, 0, sizeof(noeKeyFrameData_t));

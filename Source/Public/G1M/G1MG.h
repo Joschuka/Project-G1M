@@ -108,11 +108,62 @@ struct G1MG
 			case SECTION3_MAGIC:
 				break;
 			case VERTEX_BUFFERS_MAGIC:
-				for (auto j = 0; j < subSectionHeader.count; j++)
+			{
+				/*for (auto j = 0; j < subSectionHeader.count; j++)
 				{
 					vertexBuffers.push_back(G1MGVertexBuffer<bBigEndian>(buffer, offset,sectionHeader.chunkVersion));
+				}*/
+				int totalCount = 0;
+				int check;
+				int accOffsetBuffer = 0;
+				while (totalCount != subSectionHeader.count)
+				{
+					uint32_t peek = *(uint32_t*)(buffer + offset + 4);
+					if (peek != 1)
+					{
+						vertexBuffers.push_back(G1MGVertexBuffer<bBigEndian>(buffer, offset, sectionHeader.chunkVersion));
+						totalCount += 1;
+						if (vertexBuffers[vertexBuffers.size() - 1].unk2 != 0)
+						{
+							assert(vertexBuffers[vertexBuffers.size() - 1].unk2 == 1);
+
+							while (true)
+							{
+								check = *(int*)(buffer + offset);
+								if (check != 0x80000000)
+									break;
+								int stride = *(int*)(buffer + offset + 4);
+								int count = *(int*)(buffer + offset + 8);
+								vertexBuffers.push_back(G1MGVertexBuffer<bBigEndian>(vertexBuffers[0].bufferAdress, accOffsetBuffer, stride, count));
+								accOffsetBuffer += stride * count;
+								totalCount += 1;
+								offset += 0x10;
+							}
+						}
+
+					}
+					else
+					{
+						vertexBuffers.push_back(G1MGVertexBuffer<bBigEndian>(buffer, offset, sectionHeader.chunkVersion));
+						totalCount += 1;
+
+						while (true)
+						{
+							check = *(int*)(buffer + offset);
+							if (check != 0x80000000)
+								break;
+							int stride = *(int*)(buffer + offset + 4);
+							int count = *(int*)(buffer + offset + 8);
+							vertexBuffers.push_back(G1MGVertexBuffer<bBigEndian>(vertexBuffers[0].bufferAdress, accOffsetBuffer, stride, count));
+							accOffsetBuffer += stride * count;
+							totalCount += 1;
+							offset += 0x10;
+						}
+					}
 				}
 				break;
+			}
+
 			case VERTEX_ATTRIBUTES_MAGIC:
 				for (auto j = 0; j < subSectionHeader.count; j++)
 				{
