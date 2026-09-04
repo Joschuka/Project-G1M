@@ -1036,21 +1036,21 @@ char const* getFormatStr(PLATFORM system, uint8_t format)
 {
 	switch (system)
 	{
-	case PLATFORM::PS2:
-	case PLATFORM::NDS:     return "No known g1t files";
+	case PLATFORM::DX9:
+	case PLATFORM::PSP:     return "No known g1t files";
 
 	case PLATFORM::PS3:     return getPS3FormatStr(format);
-	case PLATFORM::X360:    return getX360FormatStr(format);
-	case PLATFORM::NWii:    return getNWiiFormatStr(format);
-	case PLATFORM::N3DS:    return getN3DSFormatStr(format);
-	case PLATFORM::PSVita:  return getPSVitaFormatStr(format);
-	case PLATFORM::Android: return getAndroidFormatStr(format);
-	case PLATFORM::iOS:     return getiOSFormatStr(format);
-	case PLATFORM::NWiiU:   return getNWiiUFormatStr(format);
-	case PLATFORM::WinMac:  
-	case PLATFORM::WinDX12: return getWinMacFormatStr(format);
+	case PLATFORM::XB2:    return getX360FormatStr(format);
+	case PLATFORM::RVL:    return getNWiiFormatStr(format);
+	case PLATFORM::CTR:    return getN3DSFormatStr(format);
+	case PLATFORM::NGP:  return getPSVitaFormatStr(format);
+	case PLATFORM::AND: return getAndroidFormatStr(format);
+	case PLATFORM::IOS:     return getiOSFormatStr(format);
+	case PLATFORM::CAFE:   return getNWiiUFormatStr(format);
+	case PLATFORM::DX11:  
+	case PLATFORM::DX12: return getWinMacFormatStr(format);
 	case PLATFORM::PS4:     return getPS4FormatStr(format);
-	case PLATFORM::NSwitch: return getNSwitchFormatStr(format);
+	case PLATFORM::NX: return getNSwitchFormatStr(format);
 	case PLATFORM::PS5:     return getPS5FormatStr(format);
 	default: return "Unknown system format";
 	}

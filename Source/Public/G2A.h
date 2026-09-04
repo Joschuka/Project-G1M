@@ -3,6 +3,72 @@
 #ifndef G2A_H
 #define G2A_H
 
+// ---------------------------------------------------------------------------
+// The engine's own names for what this file parses, so a future reader can find
+// them again. Recovered from a Windows build that ships the declarations, not
+// just the code (SAN14_EN.exe.unpacked.exe, imagebase 0x140000000).
+//
+//   ktgl::S_G2A_HEADER            32 bytes
+//     +0x00 S_RESOURCE_HEADER resHeader     magic 'G2A_' + version
+//     +0x08 unsigned int      fileSize
+//     +0x0C float             fps
+//     +0x10 unsigned __int16  frameNum
+//     +0x12 unsigned __int16  type   : 4    KTGL_G2A_MOTION_TYPE
+//           unsigned __int16  objNum : 12
+//     +0x14 unsigned int      keyInfoSize
+//     +0x18 unsigned int      curveDataNum
+//     +0x1C unsigned __int32  shapeId      : 8
+//           unsigned __int32  simAnimation : 1
+//
+//   ktgl::S_G2A_OBJECT_INFO       4 bytes, one per animated target
+//     dataNum : 4      spline count for this target
+//     targetId: 10     bone index. TEN bits, see the note in the loop below
+//     offset  : 18     into the key info block, in DWORDS
+//
+//   ktgl::S_G2A_KEY_FRAME_INFO    12 bytes + flexible array
+//     unsigned __int16 dataType        0 rotation, 1 translation, 2 scale
+//     unsigned __int16 keyFrameNum
+//     unsigned int     curveIndex
+//     unsigned __int16 keyFrame[]
+//
+//   ktgl::S_G2A_CURVE_DATA        32 bytes, unsigned __int64[4]
+//
+//   enum KTGL_G2A_MOTION_TYPE { MDL = 0, CAM = 1, SHAPE = 2 };
+//   enum KTGL_G2A_VERSION     { 0010, 0020, 0030, 0040, 0050 };  // no 0000
+//
+// Engine functions worth re-reading against a future build (match the symbol
+// name first, the addresses only mean anything in the build they came from):
+//   ktgl::CMotionData2::CreateMotionData     header and section order
+//   ktgl::CMotionData2::GetMatrix            object info bit split, record stride
+//   ktgl::CMotionData2::GetBoneTranslation   the 10 bit targetId comparison
+//   ktgl::CMotionData2::GetCurveData         key search, curveIndex arithmetic
+//   ktgl::CMotionData2::GetCameraElements    the camera reading of dataType
+//   ktgl::RefMotionData2Impl::EvaluateG2AFunctionCurve   the packed cubic
+//
+// A fuller write up, with the sample validation behind each claim, is in
+// samples/G1A_G2A.bt.
+// ---------------------------------------------------------------------------
+
+// KTGL_G2A_MOTION_TYPE. A G2A is not necessarily a skeletal animation: the same
+// container holds camera and shape motions, and for those the per spline
+// dataType below means something completely different (for a camera, 0 is the
+// eye position, 1 the look at target and 2 packs roll and fov). Importing one of
+// those as a skeleton produces garbage, so they are skipped.
+enum KTGL_G2A_MOTION_TYPE
+{
+	KTGL_G2A_MOTION_TYPE_MDL = 0,
+	KTGL_G2A_MOTION_TYPE_CAM = 1,
+	KTGL_G2A_MOTION_TYPE_SHAPE = 2,
+};
+
+// ktgl::S_G2A_KEY_FRAME_INFO::dataType, for a MDL motion.
+enum KTGL_G2A_DATA_TYPE
+{
+	KTGL_G2A_DATA_TYPE_ROTATION = 0,	// exponential map, not a quaternion
+	KTGL_G2A_DATA_TYPE_TRANSLATION = 1,
+	KTGL_G2A_DATA_TYPE_SCALE = 2,
+};
+
 //helper struct cause pointers become invalid after push_backs
 struct keyFramedValueIndex
 {
@@ -14,12 +80,13 @@ struct keyFramedValueIndex
 template<bool bBigEndian>
 struct G2AHeader
 {
-	float framerate;
-	uint32_t animationLength;
-	uint32_t boneInfoSectionSize;
-	uint32_t timingSectionSize;
-	uint32_t entryCount;
-	uint32_t boneInfoCount;
+	float framerate;					// S_G2A_HEADER::fps
+	uint32_t animationLength;			// S_G2A_HEADER::frameNum
+	uint32_t motionType;				// S_G2A_HEADER::type, KTGL_G2A_MOTION_TYPE
+	uint32_t boneInfoSectionSize;		// objNum * 4
+	uint32_t timingSectionSize;			// S_G2A_HEADER::keyInfoSize
+	uint32_t entryCount;				// S_G2A_HEADER::curveDataNum
+	uint32_t boneInfoCount;				// S_G2A_HEADER::objNum
 	bool bIsG2A5;
 	bool bIsG2A4;
 	G2AHeader(BYTE* buffer, int bufferLen, uint32_t& offset)
@@ -41,11 +108,15 @@ struct G2AHeader
 		{
 			animationLength = packedInfo >> 18;
 			boneInfoSectionSize = (packedInfo & 0x3FFF) << 2;
+			motionType = KTGL_G2A_MOTION_TYPE_MDL; //bit split unverified on big endian
 		}
 		else
 		{
-			animationLength = packedInfo & 0x3FFF;
-			boneInfoSectionSize = (packedInfo >> 18) & 0x3FFC;
+			// S_G2A_HEADER: frameNum is the whole low halfword, then type:4 and
+			// objNum:12. The old 0x3FFF mask on frameNum was two bits short.
+			animationLength = packedInfo & 0xFFFF;
+			motionType = (packedInfo >> 16) & 0xF;
+			boneInfoSectionSize = (packedInfo >> 18) & 0x3FFC; //objNum * 4
 		}
 		timingSectionSize = *(uint32_t*)(buffer + offset);
 		entryCount = *(uint32_t*)(buffer + offset + 4);
@@ -69,6 +140,17 @@ struct G2A
 	{
 		uint32_t offset = 0;
 		G2AHeader<bBigEndian> header = G2AHeader<bBigEndian>(buffer, bufferLen, offset);
+
+		// Only a model motion describes bones. A camera or shape motion reuses
+		// the identical container and the identical per spline dataType values,
+		// but they mean different things: CMotionData2::GetCameraElements reads
+		// dataType 0 as the eye position, 1 as the look at target and 2 as three
+		// loose scalars (roll, fov, one more). Feeding those to the skeletal path
+		// converts a world space position through an exponential map to
+		// quaternion and produces nonsense, silently. Nothing else in the file
+		// distinguishes them, so this check is the only guard there is.
+		if (header.motionType != KTGL_G2A_MOTION_TYPE_MDL)
+			return;
 		uint32_t lastID = 0;
 		uint32_t globalOffset = 0;
 		uint32_t checkpoint = offset;
@@ -95,13 +177,31 @@ struct G2A
 			}
 			else
 			{
+				// S_G2A_OBJECT_INFO is dataNum:4, targetId:10, offset:18 for
+				// EVERY little endian version. targetId is TEN bits, not eight:
+				// CMotionData2::GetBoneTranslation searches this array comparing
+				// ((w >> 4) & 0x3FF) against the bone it wants.
+				//
+				// The old code masked v0050 to 8 bits. That is a real bug, not a
+				// cosmetic one: 53 of 535 v0050 samples carry target ids above
+				// 255 (the highest seen is 347), so those bones aliased onto
+				// id & 0xFF. Worse, 28 of those files then looked like their ids
+				// went backwards, which fired the wrap compensation below and
+				// shifted every later bone by another 256. With the correct mask
+				// not one sample shows a decreasing id, so the wrap path stays
+				// dormant, which is what it is for: files with over 1024 bones.
 				splineTypeCount = packedInfo & 0xF;
-				boneID = header.bIsG2A5 ? (packedInfo >> 4) & 0xFF : (packedInfo >> 4) & 0x3FF;
+				boneID = (packedInfo >> 4) & 0x3FF;
+				// Engine: offset = (w >> 12) & 0xFFFFC, i.e. (w >> 14) * 4.
+				// Pre 0050 files store this word as two u16 that the loader
+				// repacks first, and on the raw dword ">> 14" happens to yield
+				// exactly the same byte offset, so both branches stay as they
+				// were. The RevAlignOffset below clears the low bits either way.
 				boneTimingDataOffset = header.bIsG2A5 ? (packedInfo >> 12) : (packedInfo >> 14);
 				if (boneID < lastID)
 					globalOffset += 1;
 				lastID = boneID;
-				boneID += globalOffset * (header.bIsG2A5 ? 256 : 1024);
+				boneID += globalOffset * 1024;
 			}
 			offset = checkpoint + header.boneInfoSectionSize + boneTimingDataOffset;
 			RevAlignOffset(offset, 4);

@@ -3,6 +3,57 @@
 #ifndef G1EM_H
 #define G1EM_H
 
+// ---------------------------------------------------------------------------
+// A G1EM HAS NO TEXTURE, AND CANNOT BE GIVEN ONE FROM INSIDE ITSELF.
+//
+// Do not go looking for a material, texture id or shader field in this format;
+// there is not one, at any level. A Windows build that declares the structures
+// shows the entire runtime chain, and every link is draw call arithmetic:
+//
+//   ktgl::S_EFFECT_MESHFILE_HEADER  16  resHeader, nFlags,
+//                                       nVertexDeclarationNum, nTotalModelNum
+//   ktgl::S_EFFECT_MESHMODEL_DATA   24  nMeshBufferIndex, nPrimType, nMinIndex,
+//                                       nVertexNum, nStartIndex, nIndexNum
+//   ktgl::CEffectMeshContainer      48  meshNum, modelNum, allocator,
+//                                       meshBuffer, models
+//   ktgl::CEffectMeshModel          32  mesh, primType, minIndex, vertexNum,
+//                                       startIndex, indexNum, extensionVertex
+//   ktgl::CEffectMeshBuffer         48  vertex decls, VB, IB, stride, offsets
+//
+// The texture is assigned by the G1FX in the same pack, by BARE POSITIONAL
+// INDEX, and the two halves meet only at draw time:
+//
+//   ktgl::S_EFFECT_DRAW_PRIMITIVE_INFO   56 bytes
+//     +0x08 const CEffectMeshModel *pMesh    <- from this file
+//     +0x18 CDX11TexContext        *pTex     <- the whole companion G1T
+//     +0x28 unsigned __int16        nTexID   <- from the G1FX
+//     +0x2A unsigned __int16        nShaderID
+//
+// CEffectObject::SetTexture(CDX11TexContext *) hands the effect the entire G1T
+// in one call, and a texture resolves as texContext->m_pTexTable[nTexID], with
+// an out of range index binding a null texture and drawing anyway. Extra maps
+// are the FOLLOWING slots: base at nTexID, then nTexID+1, nTexID+2 for the
+// normal map and the rest, so one material occupies a consecutive run of G1T
+// entries.
+//
+// Which model gets drawn is also the G1FX's call: a mesh particle manager holds
+// m_pnMeshID, an array of indices into the model list this file defines, with
+// m_nLevelNum / m_pfLODDistance choosing among them by distance.
+//
+// CONSEQUENCE FOR ANY TOOL THAT REWRITES THESE FILES: the model order here and
+// the entry order in the companion G1T are contracts. Reordering, inserting or
+// removing silently repoints every effect indexing past that point, with no
+// error at load and none at draw. Appending at the end is the only edit that is
+// safe by construction.
+//
+// Engine functions, for re-checking against a future build:
+//   ktgl::CEffectMeshContainer::CreateEffectMeshContainer
+//   ktgl::CEffectObject::SetTexture
+//   ktgl::CKTGLEffectShader::SetEffectTexture
+//   ktgl::CKTGLEffectShader::DrawEffectMeshStandard
+// Full write up in samples/G1EM.bt and samples/G1FX.bt.
+// ---------------------------------------------------------------------------
+
 ///////////////////////////////
 //     HELPER FUNCTIONS      //
 ///////////////////////////////

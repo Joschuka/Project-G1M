@@ -1595,14 +1595,19 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		{
 			for (G1MGMeshGroup<bBigEndian>& group : g1mg.meshGroups)
 			{
-				if (!group.Group)
+				// group.usage was called "Group" before; 0 is the drawable set.
+				if (!group.usage)
 				{
 					for (auto& mesh : group.meshes)
 					{
 						for (auto& index : mesh.indices)
 						{
 							submeshesIndex.insert(index); //Filter all submeshes that need to be rendered
-							lodMap[index] = group.LOD;
+							// Was group.LOD, which is really the skeleton id, so
+							// the "LOD%d" suffix below was printing that instead
+							// of the LOD level. lodLevel is the actual one; see
+							// S_G1M_GEOMETRY_SUBSET_H in G1MGMesh.h.
+							lodMap[index] = group.lodLevel;
 							bIsPhysType1[index] = mesh.meshType == 1;
 							bIsPhysType2[index] = mesh.meshType == 2;
 							if (bIsPhysType1[index] && joints) //Only NUNMeshes, avoid crashing on SOFT. Only if NUN nodes have been parsed
