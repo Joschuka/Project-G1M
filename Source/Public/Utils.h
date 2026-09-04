@@ -56,8 +56,8 @@ void function1(std::array<uint64_t, 4> & quantizedData, RichVec3 & result, float
 void function2(RichVec3 & vec, RichQuat & quat)
 {
 	float angle = sqrt(vec.v[0] * vec.v[0] + vec.v[1] * vec.v[1] + vec.v[2] * vec.v[2]);
-	float s = sin(angle * 0.5);
-	float c = cos(angle * 0.5);
+	float s = (float)sin(angle * 0.5);
+	float c = (float)cos(angle * 0.5);
 	if (angle > 0.000011920929)
 	{
 		quat.q[0] = vec.v[0] * (s / angle);
@@ -66,9 +66,9 @@ void function2(RichVec3 & vec, RichQuat & quat)
 	}
 	else
 	{
-		quat.q[0] = vec.v[0] * 0.5;
-		quat.q[1] = vec.v[1] * 0.5;
-		quat.q[2] = vec.v[2] * 0.5;
+		quat.q[0] = vec.v[0] * (float)0.5;
+		quat.q[1] = vec.v[1] * (float)0.5;
+		quat.q[2] = vec.v[2] * (float)0.5;
 
 	}
 	quat.q[3] = c;
@@ -77,18 +77,18 @@ void function2(RichVec3 & vec, RichQuat & quat)
 void function3(std::vector<std::vector<std::array<float, 4>>> & chanValues, std::vector<std::vector<float>> & chanTimes, uint32_t index, uint32_t componentCount,
 	std::set<float> & allTimes, std::vector<float> & allValues, uint32_t & stride)
 {
-	for (auto u = 0; u < componentCount; u++)
+	for (uint32_t u = 0; u < componentCount; u++)
 	{
 		for (auto& time : chanTimes[index + u])
 			allTimes.insert(time);
 	}
 	allTimes.insert(0.0);
-	stride = allTimes.size();
-	for (auto u = 0; u < componentCount; u++)
+	stride = (uint32_t)allTimes.size();
+	for (uint32_t u = 0; u < componentCount; u++)
 	{
 		for (auto& t : allTimes)
 		{
-			uint32_t chanIndex = chanValues[index + u].size() - 1;
+			uint32_t chanIndex = (uint32_t)(chanValues[index + u].size() - 1);
 			for (auto v = 0; v < chanTimes[index + u].size(); v++)
 			{
 				float& t1 = chanTimes[index + u][v];
@@ -109,7 +109,7 @@ void function3(std::vector<std::vector<std::array<float, 4>>> & chanValues, std:
 			else
 				t0 = chanTimes[index + u][chanIndex - 1];
 			float tratio = (t - t0) / (t1 - t0);
-			float value = a * pow(tratio, 3) + b * pow(tratio, 2) + c * tratio + d;
+			float value = (float)(a * pow(tratio, 3) + b * pow(tratio, 2) + c * tratio + d);
 			allValues.push_back(value);
 		}
 	}
@@ -591,7 +591,7 @@ void createDriverIndexBuffers(mesh_t & dMesh, std::vector<RichVec3> polys, std::
 	dMesh.indexBuffer.address = (BYTE*)rapi->Noesis_UnpooledAlloc(sizeof(uint16_t) * 3 * polys.size());
 	unpooledBufs.push_back(dMesh.indexBuffer.address);
 	dMesh.indexBuffer.dataType = RPGEODATA_USHORT;
-	dMesh.indexBuffer.indexCount = polys.size() * 3;
+	dMesh.indexBuffer.indexCount = (uint32_t)(polys.size() * 3);
 	dMesh.indexBuffer.primType = RPGEO_TRIANGLE;
 	uint16_t* tB = (uint16_t*)dMesh.indexBuffer.address;
 	for (auto i = 0; i < polys.size(); i++)
@@ -602,19 +602,186 @@ void createDriverIndexBuffers(mesh_t & dMesh, std::vector<RichVec3> polys, std::
 	}
 }
 
-void flip_vertically(BYTE * pixels, const size_t width, const size_t height, const size_t bytes_per_pixel)
+void flip_vertically(BYTE* pixels, const size_t width, const size_t height, const size_t bytes_per_pixel)
 {
 	const size_t stride = width * bytes_per_pixel;
 	BYTE* row = (BYTE*)malloc(stride);
+	if(!row)
+	{
+		return;
+	}
 	BYTE* low = pixels;
 	BYTE* high = &pixels[(height - 1) * stride];
 
-	for (; low < high; low += stride, high -= stride) {
+	for (; low < high; low += stride, high -= stride) 
+	{
 		memcpy(row, low, stride);
 		memcpy(low, high, stride);
 		memcpy(high, row, stride);
 	}
 	free(row);
+}
+
+void flip_horizontally(BYTE* pixels, const size_t width, const size_t height, const size_t bytes_per_pixel)
+{
+	const size_t stride = width * bytes_per_pixel;
+	BYTE* row = (BYTE*)malloc(bytes_per_pixel); // Temporary buffer for one pixel
+	if (!row)
+	{
+		return;
+	}
+
+	for (size_t y = 0; y < height; ++y) 
+	{
+		BYTE* left = &pixels[y * stride];                     // Start of the row
+		BYTE* right = &pixels[y * stride + (width - 1) * bytes_per_pixel]; // End of the row
+
+		while (left < right) 
+		{
+			// Swap the left and right pixels
+			memcpy(row, left, bytes_per_pixel);
+			memcpy(left, right, bytes_per_pixel);
+			memcpy(right, row, bytes_per_pixel);
+
+			left += bytes_per_pixel;   // Move left pointer forward
+			right -= bytes_per_pixel; // Move right pointer backward
+		}
+	}
+	free(row);
+}
+
+#define LOG_BUFFER_SIZE 256
+
+// Safe formatted logger (256 max string)
+void LogDebug(const char* format, ...)
+{
+	char msgBuffer[LOG_BUFFER_SIZE] = {};
+	va_list args;
+
+	va_start(args, format);
+	vsprintf_s(msgBuffer, LOG_BUFFER_SIZE, format, args);
+	va_end(args);
+
+	g_nfn->NPAPI_DebugLogStr(msgBuffer);
+}
+
+// Safe formatted pop up message (256 max string)
+void PopUpMessage(const wchar_t* format, ...)
+{
+	wchar_t msgBuffer[LOG_BUFFER_SIZE] = {};
+	va_list args;
+
+	va_start(args, format);
+	vswprintf_s(msgBuffer, format, args);
+	va_end(args);
+
+	g_nfn->NPAPI_MessagePrompt(msgBuffer);
+}
+
+// prompt the user (does not validate)
+BYTE* UserPrompt(char* title, char* prompt, char* defaultStr, noeRAPI_t* rapi, noeUserValType_e val = noeUserValType_e::NOEUSERVAL_STRING)
+{
+	BYTE* valueOut;
+	// unsure why this struct is so big
+	noeUserPromptParam_t promptParams = {};
+	char* titleStr = (char*)rapi->Noesis_UnpooledAlloc(MAX_NOESIS_PATH);
+	if (!titleStr)
+	{
+		PopUpMessage(L"ERROR!! titleStr alloc\n");
+		return (BYTE*)nullptr;
+	}
+	char* promptStr = (char*)rapi->Noesis_UnpooledAlloc(MAX_NOESIS_PATH);
+	if (!promptStr)
+	{
+		PopUpMessage(L"ERROR!! promptStr alloc\n");
+		return (BYTE*)nullptr;
+	}
+	char* defaultValue = (char*)rapi->Noesis_UnpooledAlloc(MAX_NOESIS_PATH);
+	if (!defaultValue)
+	{
+		PopUpMessage(L"ERROR!! defaultValue alloc\n");
+		return (BYTE*)nullptr;
+	}
+	sprintf_s(titleStr, MAX_NOESIS_PATH, "%s", title);
+	sprintf_s(promptStr, MAX_NOESIS_PATH, "%s", prompt);
+	sprintf_s(defaultValue, MAX_NOESIS_PATH, "%s", defaultStr);
+	promptParams.titleStr = titleStr;
+	promptParams.promptStr = promptStr;
+	promptParams.defaultValue = defaultValue;
+	promptParams.valType = val;
+	promptParams.valHandler = NULL;
+	while (g_nfn->NPAPI_UserPrompt(&promptParams)) 
+	{
+		valueOut = (BYTE*)promptParams.valBuf;
+		rapi->Noesis_UnpooledFree(titleStr);
+		rapi->Noesis_UnpooledFree(promptStr);
+		rapi->Noesis_UnpooledFree(defaultValue);
+		return valueOut;
+	};
+}
+
+// get a number value between two numbers (repeats if not given a value between)
+int PromptBetweenNumbers(char* title, char* prompt, char* defaultStr, int lowest, int highest, noeRAPI_t* rapi)
+{
+	int valueOut;
+	// unsure why this struct is so big
+	noeUserPromptParam_t *promptParams = (noeUserPromptParam_t*)rapi->Noesis_UnpooledAlloc(sizeof(noeUserPromptParam_t));
+	if (!promptParams)
+	{
+		PopUpMessage(L"ERROR!! promptParams alloc\n");
+		return -1;
+	}
+	char *titleStr = (char*)rapi->Noesis_UnpooledAlloc(MAX_NOESIS_PATH);
+	if (!titleStr)
+	{
+		PopUpMessage(L"ERROR!! titleStr alloc\n");
+		return -1;
+	}
+	char *promptStr = (char*)rapi->Noesis_UnpooledAlloc(MAX_NOESIS_PATH);
+	if (!promptStr)
+	{
+		PopUpMessage(L"ERROR!! promptStr alloc\n");
+		return -1;
+	}
+	char *defaultValue = (char*)rapi->Noesis_UnpooledAlloc(MAX_NOESIS_PATH);
+	if (!defaultValue)
+	{
+		PopUpMessage(L"ERROR!! defaultValue alloc\n");
+		return -1;
+	}
+	sprintf_s(titleStr, MAX_NOESIS_PATH, "%s", title);
+	sprintf_s(promptStr, MAX_NOESIS_PATH, "%s", prompt);
+	sprintf_s(defaultValue, MAX_NOESIS_PATH, "%s", defaultStr);
+	promptParams->titleStr = titleStr;
+	promptParams->promptStr = promptStr;
+	promptParams->defaultValue = defaultValue;
+	promptParams->valType = noeUserValType_e::NOEUSERVAL_INT;
+	promptParams->valHandler = NULL;
+	while (g_nfn->NPAPI_UserPrompt(promptParams))
+	{
+		valueOut = *(int*)promptParams->valBuf;
+		if (valueOut < lowest || valueOut > highest)
+		{
+			rapi->Noesis_UnpooledFree(titleStr);
+			rapi->Noesis_UnpooledFree(promptStr);
+			rapi->Noesis_UnpooledFree(defaultValue);
+			rapi->Noesis_UnpooledFree(promptParams);
+			return PromptBetweenNumbers(title, prompt, defaultStr, lowest, highest, rapi);
+		}
+		else
+		{
+			rapi->Noesis_UnpooledFree(titleStr);
+			rapi->Noesis_UnpooledFree(promptStr);
+			rapi->Noesis_UnpooledFree(defaultValue);
+			rapi->Noesis_UnpooledFree(promptParams);
+			return valueOut;
+		}
+		rapi->Noesis_UnpooledFree(titleStr);
+		rapi->Noesis_UnpooledFree(promptStr);
+		rapi->Noesis_UnpooledFree(defaultValue);
+		rapi->Noesis_UnpooledFree(promptParams);
+		return valueOut;
+	};
 }
 
 #endif // !UTILS_H

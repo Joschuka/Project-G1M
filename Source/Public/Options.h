@@ -60,6 +60,44 @@ int setG1TMergeG1MOnly(int handle, void* userData)
 	return 1;
 }
 
+//bAnimations
+void getAnimations(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::animations"), buffer, 1))
+	{
+		bAnimations = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bAnimations);
+}
+int setAnimations(int handle, void* userData)
+{
+	bAnimations = !bAnimations;
+	BYTE buffer[1] = { bAnimations };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::animations"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bAnimations);
+	return 1;
+}
+
+//bMatch
+void getMatch(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::match"), buffer, 1))
+	{
+		bMatch = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bMatch);
+}
+int setMatch(int handle, void* userData)
+{
+	bMatch = !bMatch;
+	BYTE buffer[1] = { bMatch };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::match"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bMatch);
+	return 1;
+}
+
 //bAdditive
 void getAdditive(int handle)
 {
@@ -193,6 +231,118 @@ int setEnableLOD(int handle, void* userData)
 	return 1;
 }
 
+//bPlanes
+void getLayers(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::planes"), buffer, 1))
+	{
+		bLayers = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bLayers);
+}
+int setLayers(int handle, void* userData)
+{
+	bLayers = !bLayers;
+	BYTE buffer[1] = { bLayers };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::planes"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bLayers);
+	return 1;
+}
+
+//bFlipVertically
+void getFlipVertically(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::flipVertically"), buffer, 1))
+	{
+		bFlipVertically = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bFlipVertically);
+}
+int setFlipVertically(int handle, void* userData)
+{
+	bFlipVertically = !bFlipVertically;
+	BYTE buffer[1] = { bFlipVertically };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::flipVertically"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bFlipVertically);
+	return 1;
+}
+
+//bFlipHorizontally
+void getFlipHorizontally(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::flipHorizontally"), buffer, 1))
+	{
+		bFlipHorizontally = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bFlipHorizontally);
+}
+int setFlipHorizontally(int handle, void* userData)
+{
+	bFlipHorizontally = !bFlipHorizontally;
+	BYTE buffer[1] = { bFlipHorizontally };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::flipHorizontally"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bFlipHorizontally);
+	return 1;
+}
+
+//bG1EMSplitMeshes
+void getG1EMSplitMeshes(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::G1EMSplitMeshes"), buffer, 1))
+	{
+		bG1EMSplitMeshes = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bG1EMSplitMeshes);
+}
+int setG1EMSplitMeshes(int handle, void* userData)
+{
+	bG1EMSplitMeshes = !bG1EMSplitMeshes;
+	BYTE buffer[1] = { bG1EMSplitMeshes };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::G1EMSplitMeshes"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bG1EMSplitMeshes);
+	return 1;
+}
+
+//bDebugLog
+void getDebugLog(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::debug"), buffer, 1))
+	{
+		bDebugLog = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bDebugLog);
+	if (bDebugLog && !g_nfn->NPAPI_DebugLogIsOpen()) g_nfn->NPAPI_PopupDebugLog(0);
+	if (bDebugLog) 
+	{
+		LogDebug("G1M v%s debugging enabled.\n", PLUGIN_VERSON);
+	}
+}
+int setDebugLog(int handle, void* userData)
+{
+	bDebugLog = !bDebugLog;
+	BYTE buffer[1] = { bDebugLog };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::debug"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bDebugLog);
+	if (bDebugLog) 
+	{
+		if (!g_nfn->NPAPI_DebugLogIsOpen())
+		{
+			g_nfn->NPAPI_PopupDebugLog(0);
+		}
+		LogDebug("G1M v%s debugging enabled.\n", PLUGIN_VERSON);
+	}
+	else 
+	{
+		LogDebug("G1M v%s debugging disabled.\n", PLUGIN_VERSON);
+	}
+	return 1;
+}
+
 //g1t console command
 bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
 {
@@ -203,16 +353,16 @@ bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
 	}
 	else
 	{
-		strcpy(g1tConsolePath, "");
+		strcpy_s(g1tConsolePath, "");
 		return false;
 	}
-		
+
 }
 
 void g1tConsoleReset(unsigned char* store, int storeSize)
 {
 	*store = 1;
-	strcpy(g1tConsolePath, "");
+	strcpy_s(g1tConsolePath, "");
 }
 
 #endif // !G1MOPT_H

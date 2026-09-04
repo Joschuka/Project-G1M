@@ -3,20 +3,83 @@
 #ifndef G1A_H
 #define G1A_H
 
+// ---------------------------------------------------------------------------
+// The engine's own names for this header, from a Windows build that ships the
+// declarations (SAN14_EN.exe.unpacked.exe, imagebase 0x140000000):
+//
+//   ktgl::S_G1A_HEADER            48 bytes
+//     +0x00 S_RESOURCE_HEADER resHeader     magic 'G1A_' + version
+//     +0x08 unsigned int      fileQWC       whole file, in 16 byte units
+//     +0x0C char              dataType      KTGL_G1A_DATA_TYPE
+//     +0x0D unsigned __int8   timeType   : 4   KTGL_G1A_TIME_TYPE
+//           unsigned __int8   isScalable : 1
+//           unsigned __int8   isQuaternion : 1
+//           unsigned __int8   isSimAnimation : 1
+//     +0x0E unsigned __int16  other         [OES2] calls this "levels"
+//     +0x10 float             maxTime
+//     +0x14 int               headQWC       curve data starts at 16 * this
+//     +0x18 unsigned int      ktglAddress[2]   runtime scratch, 0 on disk
+//     +0x20 (the level offset table begins here)
+//
+//   enum KTGL_G1A_DATA_TYPE { MODEL = 0, CAMERA = 1, LIGHT = 2, SHAPE = 4 };
+//   enum KTGL_G1A_TIME_TYPE { FRAME = 0, SEC = 1 };
+//   enum KTGL_G1A_VERSION   { 0042, 0043, 0044, 0045 };  // CURRENT = 0045
+//
+// The offsets this struct already used line up with that exactly: "duration" is
+// maxTime and "dataSectionOffset" is headQWC * 16. Only the names were missing.
+//
+// Container shape, from the address arithmetic shared by GetCameraElementsOf,
+// GetLightElementsOf and GetShapeElementsOf:
+//     levelTable = fileStart + 32                 one u32 per level
+//     level i    = levelTable + 16 * levelTable[i]
+//     object j   = level + 16 * level.entry[j].offset
+// This struct assumes a single level whose offset is 1, which puts the jump
+// table at +48 and is what "boneInfoCount" reads. Every sample seen so far is
+// single level, so that holds, but a multi level file would need the table walk.
+//
+// See samples/G1A_G2A.bt for the validated write up and the sample counts.
+// ---------------------------------------------------------------------------
+
+// ktgl::S_G1A_HEADER::dataType. A G1A is not always a bone animation: the same
+// container carries camera, light and shape animations, distinguished only by
+// this byte. Their objects use a different opcode range entirely (101/102 for
+// cameras, 201/202/203 for lights, 401 for shapes) rather than the 0..8 bone
+// opcodes, so a non MODEL file yields no bones at all.
+enum KTGL_G1A_DATA_TYPE
+{
+	KTGL_G1A_DATA_TYPE_MODEL = 0,
+	KTGL_G1A_DATA_TYPE_CAMERA = 1,
+	KTGL_G1A_DATA_TYPE_LIGHT = 2,
+	KTGL_G1A_DATA_TYPE_SHAPE = 4,
+};
+
+// ktgl::S_G1A_HEADER, the timeType nibble at +0x0D.
+enum KTGL_G1A_TIME_TYPE
+{
+	KTGL_G1A_TIME_TYPE_FRAME = 0,
+	KTGL_G1A_TIME_TYPE_SEC = 1,
+};
+
 template<bool bBigEndian>
 struct G1AHeader
 {
-	uint16_t animationType; //not sure
-	float duration; //in seconds
-	uint32_t dataSectionOffset;	
-	uint16_t boneInfoCount;
+	uint16_t animationType;		// dataType | (timeType/isScalable/isQuaternion << 8)
+	float duration;				// S_G1A_HEADER::maxTime
+	uint32_t dataSectionOffset;	// S_G1A_HEADER::headQWC * 0x10
+	uint16_t boneInfoCount;		// object count of level 0's jump table
 	uint16_t boneMaxID;
 	uint32_t chunkVersion;
+
+	// Split out of animationType so callers do not have to know the packing.
+	uint8_t dataType() const { return static_cast<uint8_t>(animationType & 0xFF); }
+	uint8_t timeType() const { return static_cast<uint8_t>((animationType >> 8) & 0x0F); }
+	bool isQuaternion() const { return ((animationType >> 8) & 0x20) != 0; }
+
 	G1AHeader(BYTE* buffer, int bufferLen, uint32_t& offset)
 	{
 		GResourceHeader<bBigEndian> sectionHeader = reinterpret_cast<GResourceHeader<bBigEndian>*>(buffer);
 		chunkVersion = sectionHeader.chunkVersion;
-		offset += sizeof(GResourceHeader<bBigEndian>);	
+		offset += sizeof(GResourceHeader<bBigEndian>);
 		animationType = *(uint16_t*)(buffer + offset);
 		offset += 4; //skip unknown
 		duration = *(float*)(buffer + offset);
@@ -49,6 +112,16 @@ struct G1A
 		std::vector<keyFramedValueIndex> keyFramedValuesIndices;
 
 		G1AHeader<bBigEndian> header = G1AHeader<bBigEndian>(buffer, bufferLen, offset);
+
+		// Only a MODEL animation describes bones. Camera, light and shape files
+		// use the same container and the same header, and are told apart only by
+		// dataType; their objects carry opcodes 101/102, 201/202/203 and 401,
+		// none of which the bone opcode table below accepts. Bailing out here
+		// makes that explicit instead of quietly walking a jump table of camera
+		// objects and producing an animation with no bones in it.
+		if (header.dataType() != KTGL_G1A_DATA_TYPE_MODEL)
+			return;
+
 		uint32_t checkpoint = offset;
 		for (auto i = 0; i < header.boneInfoCount; i++)
 		{
@@ -83,28 +156,76 @@ struct G1A
 			std::vector<std::vector<std::array<float,4>>> chanValues; //...
 			std::vector<std::vector<float>> chanTimes;
 			//helping variables
+			// Channel layout per opcode, taken from the engine's own switch in
+			// ktgl::S_MODEL_MOTION_SET::GetModelElementsOf, which reads the
+			// curves back one index at a time. Order is always scale, then
+			// rotation, then translation.
+			//
+			//   0  nothing animated (bind pose)                        0 curves
+			//   1  rotation xyz                                        3
+			//   2  quaternion xyzw                                     4
+			//   3  rotation xyz + translation xyz                      6
+			//   4  quaternion xyzw + translation xyz                   7
+			//   5  scale xyz + rotation xyz + translation xyz          9
+			//   6  scale xyz + quaternion xyzw + translation xyz      10
+			//   7  scale xyz + rotation xyz                            6
+			//   8  scale xyz + quaternion xyzw                         7
+			//
+			// Odd opcodes carry a 3 component rotation, even ones a quaternion;
+			// the engine reports which through S_MODEL_MOTION_SET's return value
+			// and the file says so up front via the header's isQuaternion bit.
+			//
+			// Whatever an opcode omits comes from the bind pose, which the engine
+			// takes from a 48 byte record per bone (scale, quat, translation) and
+			// points the missing slot straight at. 7 and 8 are the mirror of 1 and
+			// 2: they animate scale where those two animate nothing but rotation.
+			//
+			// The previous table here was wrong in three ways: opcode 1 was one
+			// component short, and opcodes 3 and 5 fell through to the default and
+			// dropped the whole bone. Opcodes 7 and 8 were also missing, and were
+			// likewise dropping every bone that used them.
 			int32_t componentCount = -1, indexs = -1, indexr = -1, indexl = -1;
+			int32_t rotComponents = 4;
 			switch (opcode)
 			{
-			case 0x1:
-				componentCount = 2;
+			case 0:		// bind pose, nothing to read
+				continue;
+			case 1:
+				componentCount = 3;
+				indexr = 0; rotComponents = 3;
 				break;
-			case 0x2:
+			case 2:
 				componentCount = 4;
 				indexr = 0;
 				break;
-			case 0x4:
+			case 3:
+				componentCount = 6;
+				indexr = 0; rotComponents = 3;
+				indexl = 3;
+				break;
+			case 4:
 				componentCount = 7;
 				indexr = 0;
 				indexl = 4;
 				break;
-			case 0x6:
+			case 5:
+				componentCount = 9;
+				indexs = 0;
+				indexr = 3; rotComponents = 3;
+				indexl = 6;
+				break;
+			case 6:
 				componentCount = 10;
 				indexs = 0;
 				indexr = 3;
 				indexl = 7;
 				break;
-			case 0x8:
+			case 7:
+				componentCount = 6;
+				indexs = 0;
+				indexr = 3; rotComponents = 3;
+				break;
+			case 8:
 				componentCount = 7;
 				indexs = 0;
 				indexr = 3;
@@ -179,6 +300,24 @@ struct G1A
 				
 				chanValues.push_back(std::move(data));
 				chanTimes.push_back(std::move(times));
+			}
+
+			// The 3 component form is a rotation vector, not a quaternion with a
+			// dropped w: the engine leaves q.w untouched for those opcodes and
+			// does not normalise, so it cannot be reconstructed the way a packed
+			// quaternion could. The Android build of the engine only ever runs
+			// the quaternion path (CModelObjectSkeleton::ApplyMotion asserts
+			// _motionData->IsQuaternion()), and it ships no vector to quaternion
+			// converter, so the exact encoding is not pinned down here and no
+			// sample using it was available to test against.
+			//
+			// Rather than emit a rotation that is probably wrong, skip just the
+			// rotation and keep the rest. That is still a clear improvement:
+			// these bones used to be dropped whole, losing their translation and
+			// scale as well. Fill this in once a non quaternion sample turns up.
+			if (indexr >= 0 && rotComponents != 4)
+			{
+				indexr = -1;
 			}
 
 			if (indexr >= 0)

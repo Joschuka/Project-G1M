@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -39,7 +39,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\Public\Archives.h" />
     <ClInclude Include="Source\Public\G1A.h" />
+    <ClInclude Include="Source\Public\G1EM.h" />
     <ClInclude Include="Source\Public\G1M.h" />
     <ClInclude Include="Source\Public\G1M\G1MG.h" />
     <ClInclude Include="Source\Public\G1M\G1MG\G1MGBonePalette.h" />
@@ -56,7 +58,10 @@
     <ClInclude Include="Source\Public\G1M\NUNV.h" />
     <ClInclude Include="Source\Public\G1M\SOFT.h" />
     <ClInclude Include="Source\Public\G1T.h" />
+    <ClInclude Include="Source\Public\G1TFormatStr.h" />
+    <ClInclude Include="Source\Public\G1TFormatConvert.h" />
     <ClInclude Include="Source\Public\G2A.h" />
+    <ClInclude Include="Source\Public\G1TL.h" />
     <ClInclude Include="Source\Public\KHM.h" />
     <ClInclude Include="Source\Public\OBJD.h" />
     <ClInclude Include="Source\Public\Oid.h" />
@@ -167,7 +172,7 @@
       <StructMemberAlignment>1Byte</StructMemberAlignment>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>

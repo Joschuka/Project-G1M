@@ -7,6 +7,8 @@ Native Noesis C++ plugin for g1m files.
 
 Simply put the dll in the plugins folder, next to the others.
 
+You may need [Microsoft Visual Redistributable Package](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170) installed, if not already.
+
 ## Options
 
 The plugin's options can be found under the "Tools" tab.

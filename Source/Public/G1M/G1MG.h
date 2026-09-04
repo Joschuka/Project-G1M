@@ -125,7 +125,7 @@ struct G1MG
 						totalCount += 1;
 						if (vertexBuffers[vertexBuffers.size() - 1].unk2 != 0)
 						{
-							assert(vertexBuffers[vertexBuffers.size() - 1].unk2 == 1);
+							// assert(vertexBuffers[vertexBuffers.size() - 1].unk2 == 1);
 
 							while (true)
 							{
