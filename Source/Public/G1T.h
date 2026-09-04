@@ -74,8 +74,8 @@ enum class TEX_EX_TYPE : uint16_t
     IBL_SHADOW            = 0x04, // COLOR_TEST Ive seen on 4 layer arrays, maybe a single color from each slice RGBA?
 	TLUT                  = 0x05, // N3DS_Wii_SWIZZLE Don't need the data on these for the swizzle
 	CAFE_SWIZZLE          = 0x06, // WiiU Reads data but likely doesn't need it
-	PS4_PLANE_ARRAY       = 0x07, // PS4_PLANE_ARRAY No idea. Might also be a KTID? These textures have crazy high layers too
-	SH_IRRADIANCE_VOLUME  = 0x08, // PSVITA_PS5_SWIZZLE
+	SH_IRRADIANCE_VOLUME  = 0x07, // PS4_PLANE_ARRAY No idea. Might also be a KTID? These textures have crazy high layers too
+	ARRAY                 = 0x08, // PSVITA_PS5_SWIZZLE
 	CUBICARRAY_SHADOW     = 0x09, // 
 	PLANARARRAY_SHADOW    = 0x0A, // 
 	CUBICARRAY_ESM        = 0x0B, //
@@ -85,9 +85,9 @@ enum class TEX_EX_TYPE : uint16_t
 	SDF                   = 0x0F, //
 	TONEMAP               = 0x10, //
 	LIGHTMAP              = 0x11, //
-	//???                 = 0x12, //
-	//???                 = 0x13, //
-	//???                 = 0x14, //
+  //???                   = 0x12, //
+  //???                   = 0x13, //
+  //???                   = 0x14, //
 	ASTC_TYPE             = 0x15
 };
 
@@ -822,7 +822,7 @@ struct S_G1T_HEADER_EX
 		{
 			WiiU_SWIZZLE = EXTRA_INTS[0];
 		}
-		else if (TYPE == TEX_EX_TYPE::PS4_PLANE_ARRAY && COUNT == 32)
+		else if (TYPE == TEX_EX_TYPE::SH_IRRADIANCE_VOLUME && COUNT == 32)
 		{
 			// unsure what this is, Vector bases?
 			int vOffset = offset;
@@ -1446,7 +1446,7 @@ struct G1TG_TEXTURE
 						LogDebug("\tKT_ASTC_FORMAT:\t%d (%s)\n", G1T_HEADER_EX.KT_ASTC_FORMAT, ASTC_FORMAT_STR[clamp_index((int)G1T_HEADER_EX.KT_ASTC_FORMAT, sizeof(ASTC_FORMAT_STR))]);
 					}
 
-					if (G1T_HEADER_EX.TYPE == TEX_EX_TYPE::PS4_PLANE_ARRAY)
+					if (G1T_HEADER_EX.TYPE == TEX_EX_TYPE::SH_IRRADIANCE_VOLUME)
 					{
 						LogDebug("\tARRAY_DEPTH:\t\t%d\n", G1T_HEADER_EX.ARRAY_DEPTH);
 					}
@@ -1611,7 +1611,7 @@ struct G1TG_TEXTURE
 				// was on test file for Switch seeker_wt_pb2warray2.g1t
 				// Lots of full alpha images
 				break;
-			case TEX_EX_TYPE::SH_IRRADIANCE_VOLUME:
+			case TEX_EX_TYPE::ARRAY:
 				// unsure what to do here, might just be a flag
 				// that the textures can be palettable
 				break;
@@ -1676,13 +1676,13 @@ struct G1TG_TEXTURE
 							META.WiiU_SWIZZLE = ExList[ex].WiiU_SWIZZLE;
 							META.bSwizzled = true;
 							break;
-						case TEX_EX_TYPE::PS4_PLANE_ARRAY:
+						case TEX_EX_TYPE::SH_IRRADIANCE_VOLUME:
 							// I don't think this one is consumed
 							// read every time for all tex
 							META.ARRAY_ID1 = ExList[ex].ID1;
 							META.ARRAY_DEPTH = ExList[ex].ARRAY_DEPTH;
 							break;
-						case TEX_EX_TYPE::SH_IRRADIANCE_VOLUME:
+						case TEX_EX_TYPE::ARRAY:
 							META.bSwizzled = true;
 							break;
 						case TEX_EX_TYPE::ASTC_TYPE:
@@ -3203,7 +3203,7 @@ struct G1TG_TEXTURE
 						case TEX_EX_TYPE::ASTC_TYPE:
 							LogDebug("\n\t*KT_ASTC_FORMAT:\t%d (%s)\n", ex_header.KT_ASTC_FORMAT, ASTC_FORMAT_STR[clamp_index((int)ex_header.KT_ASTC_FORMAT, sizeof(ASTC_FORMAT_STR))]);
 							break;
-						case TEX_EX_TYPE::PS4_PLANE_ARRAY:
+						case TEX_EX_TYPE::SH_IRRADIANCE_VOLUME:
 							LogDebug("\n\t*ARRAY_DEPTH:\t\t%d\n", ex_header.ARRAY_DEPTH);
 							break;
 						default:
