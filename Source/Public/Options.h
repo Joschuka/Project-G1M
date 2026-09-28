@@ -193,6 +193,25 @@ int setEnableLOD(int handle, void* userData)
 	return 1;
 }
 
+//bLoadSoft
+void getEnableSoft(int handle)
+{
+	BYTE buffer[1];
+	if (g_nfn->NPAPI_UserSettingRead(const_cast<wchar_t*>(L"g1m::loadSoft"), buffer, 1))
+	{
+		bLoadSoft = buffer[0] == 1;
+	}
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bLoadSoft);
+}
+int setEnableSoft(int handle, void* userData)
+{
+	bLoadSoft = !bLoadSoft;
+	BYTE buffer[1] = { bLoadSoft };
+	g_nfn->NPAPI_UserSettingWrite(const_cast<wchar_t*>(L"g1m::loadSoft"), buffer, 1);
+	g_nfn->NPAPI_CheckToolMenuItem(handle, bLoadSoft);
+	return 1;
+}
+
 //g1t console command
 bool g1tConsoleHandler(const char* arg, unsigned char* store, int storeSize)
 {
