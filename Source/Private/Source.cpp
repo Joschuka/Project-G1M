@@ -36,6 +36,7 @@ bool bNoTextureRename = false;
 char g1tConsolePath[MAX_NOESIS_PATH];
 bool bEnableNUNAutoRig = true;
 bool bLoadAllLODs = false;
+bool bLoadSoft = false;
 
 bool bIsNUNO5Global = false; //As of now I'm not sure how this chunk works when paired with other NUNO5 so I'm adding a quick and dirty option until I discover more.
 bool bNUNO5HasSubsets = false; //Temporary hack to prevent subsets from making anchored cloth to crash
@@ -579,9 +580,12 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 	}
 
 	//SOFT
-	for (auto i = 0; i < SOFTOffsets.size(); i++)
+	if (bLoadSoft)
 	{
-		SOFTs.push_back(std::move(SOFT<bBigEndian>(fileBuffers[SOFTFileIDs[i]], SOFTOffsets[i])));
+		for (auto i = 0; i < SOFTOffsets.size(); i++)
+		{
+			SOFTs.push_back(std::move(SOFT<bBigEndian>(fileBuffers[SOFTFileIDs[i]], SOFTOffsets[i])));
+		}
 	}
 
 	for (auto& soft : SOFTs)
@@ -1007,41 +1011,44 @@ noesisModel_t* ProcessModel(BYTE* fileBuffer, int bufferLen, int& numMdl, noeRAP
 		}
 
 		//SOFT Chunks
-		/*for (auto i = 0; i < SOFTFileIDs.size(); i++) {
-
-			for (auto& soft1 : SOFTs[i].Soft1s)
-			{
-				uint32_t jointStart = jointIndex;
-				uint32_t softParentJointID;
-				if (soft1.parentID >> 31)
-					softParentJointID = globalToFinal[soft1.parentID ^ 0x80000000];
-				else
-					softParentJointID = globalToFinal[soft1.parentID];
-
-				//Process Nodes
-				for (auto j = 0; j < soft1.softNodes.size(); j++)
+		if (bLoadSoft)
+		{
+			for (auto i = 0; i < SOFTFileIDs.size(); i++) {
+		
+				for (auto& soft1 : SOFTs[i].Soft1s)
 				{
-					auto p = soft1.softNodes[j].pos;
-					auto parentID = soft1.parentID;
-
-					modelBone_t* joint = joints + jointIndex;
-					RichMat43 jointMatrix = soft1.softNodes[j].rot.ToMat43().m;
-					g_mfn->Math_VecCopy(p.v, jointMatrix.m.o);
-
-					joint->mat = jointMatrix.m;
-					snprintf(joint->name, 128, "soft1_p_%d_bone_%d", parentID, jointIndex);
-					joint->index = jointIndex;
-					joint->eData.parent = joints + parentID;
-					joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
-					joint->eData.mpDebug->mPointColor[0] = 1;
-					joint->eData.mpDebug->mPointColor[1] = 1;
-					joint->eData.mpDebug->mPointColor[2] = 0;
-
-					jointIndex++;
+					uint32_t jointStart = jointIndex;
+					uint32_t softParentJointID;
+					if (soft1.parentID >> 31)
+						softParentJointID = globalToFinal[soft1.parentID ^ 0x80000000];
+					else
+						softParentJointID = globalToFinal[soft1.parentID];
+		
+					//Process Nodes
+					for (auto j = 0; j < soft1.softNodes.size(); j++)
+					{
+						auto p = soft1.softNodes[j].pos;
+						auto parentID = soft1.parentID;
+		
+						modelBone_t* joint = joints + jointIndex;
+						RichMat43 jointMatrix = soft1.softNodes[j].rot.ToMat43().m;
+						g_mfn->Math_VecCopy(p.v, jointMatrix.m.o);
+		
+						joint->mat = jointMatrix.m;
+						snprintf(joint->name, 128, "soft1_p_%d_bone_%d", parentID, jointIndex);
+						joint->index = jointIndex;
+						joint->eData.parent = joints + parentID;
+						joint->eData.mpDebug = rapi->Noesis_AllocBoneDebugInfo(nullptr);
+						joint->eData.mpDebug->mPointColor[0] = 1;
+						joint->eData.mpDebug->mPointColor[1] = 1;
+						joint->eData.mpDebug->mPointColor[2] = 0;
+		
+						jointIndex++;
+					}
+		
 				}
-
 			}
-		}*/
+		}
 
 
 	}
@@ -2224,6 +2231,11 @@ bool NPAPI_InitLocal(void)
 	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Load all LODs"));
 	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
 	getEnableLOD(optHandle);
+
+	optHandle = g_nfn->NPAPI_RegisterTool(const_cast<char*>("Load SOFT nodes"), setEnableSoft, nullptr);
+	g_nfn->NPAPI_SetToolHelpText(optHandle, const_cast<char*>("Load SOFT nodes"));
+	g_nfn->NPAPI_SetToolSubMenuName(optHandle, const_cast<char*>("Project G1M"));
+	getEnableSoft(optHandle);
 
 	//Console command
 	unsigned char g1tConsoleStore[MAX_NOESIS_PATH];
